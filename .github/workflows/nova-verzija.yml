@@ -1,0 +1,33 @@
+name: Nova verzija
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Alati za pakovanje
+        run: sudo apt-get update && sudo apt-get install -y xvfb zip unzip
+      - name: Instalacija modula
+        run: npm ci
+      - name: Verzija iz package.json
+        id: v
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Provjera da ta verzija još nije objavljena
+        run: |
+          if git ls-remote --tags origin "refs/tags/v${{ steps.v.outputs.version }}" | grep -q .; then
+            echo "::error::Verzija ${{ steps.v.outputs.version }} je već objavljena – povećajte broj verzije u package.json."; exit 1; fi
+      - name: Testovi i pakovanje (Windows portable ZIP)
+        run: mkdir -p ~/.cache/electron && bash build/build-portable.sh
+      - name: Objava verzije
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.v.outputs.version }}
+          name: ${{ steps.v.outputs.version }}
+          files: dist/Pracenje-sudjenja-*.zip

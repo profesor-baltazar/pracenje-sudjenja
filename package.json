@@ -1,0 +1,21 @@
+{
+  "name": "pracenje-sudjenja",
+  "productName": "Praćenje suđenja",
+  "version": "1.0.0",
+  "description": "Praćenje suđenja",
+  "author": "CeMI",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node test/run-tests.js",
+    "smoke": "node test/smoke-electron.js smoke.png"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "sql.js": "^1.11.0"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "playwright-core": "1.63.0"
+  }
+}

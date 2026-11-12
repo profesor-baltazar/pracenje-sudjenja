@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    function verified() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+    function me() { return request.auth.token.email.lower(); }
+    function isUser() {
+      return verified() && exists(/databases/$(db)/documents/users/$(me()));
+    }
+    function isAdmin() {
+      return isUser() && get(/databases/$(db)/documents/users/$(me())).data.role == 'admin';
+    }
+    function isList(col) {
+      return col in ['predmeti', 'faze', 'odlaganja', 'mjere', 'presuda1', 'zalba', 'presuda2', 'ishod', 'pritvori', 'jemstva', 'nadzor', 'vpl', 'komentari', 'roc_predmeti', 'roc_rocista', 'svi_predmeti', 'svi_faze', 'svi_odlaganja', 'svi_mjere', 'svi_presuda1', 'svi_zalba', 'svi_ishod', 'svi_pritvori', 'svi_jemstva', 'svi_nadzor', 'svi_vpl', 'svi_komentari', 'svir_predmeti', 'svir_rocista', 'vaw_predmeti']
+          || col.matches('x_[a-z0-9_]{1,48}');
+    }
+
+    // lista odobrenih korisnika (id = e-mail)
+    match /users/{email} {
+      allow read: if isUser() || (verified() && email == me());
+      allow write: if isAdmin();
+      // prvi admin novog projekta
+      allow create: if verified() && email == me() && request.resource.data.role == 'admin'
+                    && !exists(/databases/$(db)/documents/meta/bootstrap)
+                    && existsAfter(/databases/$(db)/documents/meta/bootstrap);
+    }
+
+    match /meta/{doc} {
+      allow read: if isUser();
+      allow write: if isAdmin();
+      allow create: if doc == 'bootstrap' && verified()
+                    && request.resource.data.by == me()
+                    && existsAfter(/databases/$(db)/documents/users/$(me()));
+    }
+
+    // monitor moze da brise samo svoje zapise (_owner)
+    function owner(d) { return d.get('_owner', ''); }
+    match /{col}/{id} {
+      allow read: if isList(col) && isUser();
+      allow create: if isList(col) && isUser() && request.resource.data._deleted != true
+                    && (owner(request.resource.data) == '' || owner(request.resource.data) == me());
+      allow update: if isList(col) && isUser()
+                    && owner(request.resource.data) == owner(resource.data)
+                    && (request.resource.data._deleted != true || isAdmin() || owner(resource.data) == me())
+                    && (resource.data._deleted != true || isAdmin());
+      allow delete: if false;
+    }
+  }
+}
