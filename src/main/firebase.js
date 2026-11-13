@@ -36,10 +36,13 @@ class Auth {
     this.cfg = config; this.file = file;
     this.crypt = crypt || { enc: s => s, dec: b => b.toString('utf8') };
     this.session = null; this.idToken = null; this.expires = 0;
-    try { if (fs.existsSync(file)) this.session = JSON.parse(this.crypt.dec(fs.readFileSync(file))); } catch { this.session = null; }
+    try { if (fs.existsSync(file) && (!this.crypt.ok || this.crypt.ok())) this.session = JSON.parse(this.crypt.dec(fs.readFileSync(file))); } catch { this.session = null; }
   }
   url(m) { return `https://identitytoolkit.googleapis.com/v1/accounts:${m}?key=${this.cfg.apiKey}`; }
-  persist() { if (this.session) fs.writeFileSync(this.file, this.crypt.enc(JSON.stringify(this.session))); else if (fs.existsSync(this.file)) fs.unlinkSync(this.file); }
+  persist() {
+    if (this.session && (!this.crypt.ok || this.crypt.ok())) fs.writeFileSync(this.file, this.crypt.enc(JSON.stringify(this.session)));
+    else if (fs.existsSync(this.file)) fs.unlinkSync(this.file);
+  }
   user() { return this.session ? { email: this.session.email, uid: this.session.uid } : null; }
 
   async register(email, password) {

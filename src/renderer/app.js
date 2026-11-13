@@ -767,12 +767,12 @@ async function cancelEdit() {
   st.edit = null; startStepIfSingle(); render();
 }
 function startStepIfSingle() { if (!S.LIST_BY_KEY[st.step].many) startStep(); }
-const isMine = r => !r.remote || (!!r.owner && r.owner === st.app.me.email);
+const isMine = r => r.owner ? r.owner === st.app.me.email : !r.remote;
 // admin brise sve, monitor samo predmet koji je sam unio
 function canDelete(rec) {
   if (!S.LIST_BY_KEY[rec.list].isCase) return false;
   if (st.app.isAdmin) return true;
-  return isMine(rec) && S.listsOf(S.LIST_BY_KEY[rec.list].space).slice(1).every(l => allChildRecs(l.key, rec.id).every(isMine));
+  return isMine(rec);
 }
 async function del(rec) {
   const isCase = S.LIST_BY_KEY[rec.list].isCase;

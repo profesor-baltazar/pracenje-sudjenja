@@ -31,7 +31,7 @@ class Sync {
     this.running = null;
   }
   status(extra) {
-    const s = { pending: this.store.pending().length, conflicts: this.store.conflicts().length, lastSync: this.store.get('lastSync'), ...extra };
+    const s = { pending: this.store.pending(this.me().email).length, conflicts: this.store.conflicts().length, lastSync: this.store.get('lastSync'), ...extra };
     this.onStatus(s); return s;
   }
   run() { if (!this.running) this.running = this._run().finally(() => { this.running = null; }); return this.running; }
@@ -63,7 +63,7 @@ class Sync {
 
   async push() {
     const order = Schema.LISTS.map(l => l.key);
-    const pend = this.store.pending().filter(r => !r.conflict && Schema.LIST_BY_KEY[r.list]).sort((a, b) => order.indexOf(a.list) - order.indexOf(b.list));
+    const pend = this.store.pending(this.me().email).filter(r => !r.conflict && Schema.LIST_BY_KEY[r.list]).sort((a, b) => order.indexOf(a.list) - order.indexOf(b.list));
     const creates = pend.filter(r => !r.remote && !r.deleted), others = pend.filter(r => r.remote);
     let done = 0; const total = pend.length;
     for (let i = 0; i < creates.length; i += BATCH) {

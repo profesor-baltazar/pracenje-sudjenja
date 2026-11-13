@@ -33,7 +33,11 @@ function mergeRetrials(recs, prefix) {
         if (cand.length === 1) o = cand[0];
       }
     }
-    if (!o) { report.unmatched.push(t); continue; }
+    if (!o) {   // ostaje poseban predmet, oznacen kao ponovljeni (statistika ga ne broji dvaput)
+      report.unmatched.push(t); r.fields.Ponovljenipostupak = true;
+      r.fields.napomenaBroja = [r.fields.napomenaBroja, 'ponovljeni postupak – izvorni predmet nije pronađen pri uvozu'].filter(Boolean).join('; ');
+      continue;
+    }
     if (!plan.has(o.id)) plan.set(o.id, []);
     plan.get(o.id).push(r);
   }
@@ -69,7 +73,6 @@ function mergeRetrials(recs, prefix) {
     o.fields.Ponovljenipostupak = false;
   }
   recs[prefix + 'predmeti'] = cases.filter(c => !remove.has(c.id));
-  for (const c of recs[prefix + 'predmeti']) if (c.fields.Ponovljenipostupak) c.fields.Ponovljenipostupak = false;
   return report;
 }
 

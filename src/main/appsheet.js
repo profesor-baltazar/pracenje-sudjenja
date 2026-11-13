@@ -265,7 +265,7 @@ async function readAppSheet(files) {
   }
   report.merged = [...recs.svi_predmeti.filter(c => c._inline).map(c => c._inline), ...mr.merged, ...(report.merged || [])];
   for (const c of recs.svi_predmeti) delete c._inline;
-  for (const t of mr.unmatched) report.warnings.push(`Ponovljeni postupak ${t}: izvorni predmet nije pronađen – uvezen kao poseban predmet`);
+  for (const t of mr.unmatched) report.warnings.push(`Ponovljeni postupak ${t}: izvorni predmet nije pronađen – uvezen kao poseban predmet, označen kao ponovljeni`);
   for (const [list, rs] of Object.entries(recs)) {
     for (const r of rs) for (const f of Schema.fieldsOf(list)) if (!f.virtual && !(f.name in r.fields)) r.fields[f.name] = f.type === 'bool' ? false : f.type === 'multichoice' ? [] : null;
   }

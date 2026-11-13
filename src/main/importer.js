@@ -93,16 +93,26 @@ const DETECT = [
 COLS.presuda2 = { ...COLS.presuda1, 'Datum objavljivanja presude': 'Datumobjavljivanjapresude' };
 delete COLS.presuda2['Datum objavljivanja prvostepene presude'];
 
+// datum u obliku godina-mjesec-dan, samo ako stvarno postoji (npr. 30. februar ne prolazi)
+const ymd = (y, m, d) => { const t = new Date(Date.UTC(+y, +m - 1, +d));
+  return t.getUTCFullYear() === +y && t.getUTCMonth() === +m - 1 && t.getUTCDate() === +d ? `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}` : undefined; };
 function toDate(s) {
   s = (s || '').trim(); if (!s) return null;
   let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (m) return `${m[3]}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
+  if (m) return ymd(m[3], m[1], m[2]);
   m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);
-  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  if (m) return ymd(m[3], m[2], m[1]);
   m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  return m ? `${m[1]}-${m[2]}-${m[3]}` : undefined;
+  return m ? ymd(m[1], m[2], m[3]) : undefined;
 }
-function toNumber(s) { s = (s || '').trim(); if (!s) return null; const n = Number(s.replace(/,/g, '')); return isFinite(n) ? n : undefined; }
+// SharePoint pise hiljade sa zarezom (1,000); "1,5" ili "1.000,50" su decimalni zarez
+function toNumber(s) {
+  s = (s || '').trim().replace(/\s/g, ''); if (!s) return null;
+  if (/^-?\d{1,3}(,\d{3})+(\.\d+)?$/.test(s)) s = s.replace(/,/g, '');
+  else if (/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
+  else if (/^-?\d+,\d+$/.test(s)) s = s.replace(',', '.');
+  const n = Number(s); return s !== '' && isFinite(n) ? n : undefined;
+}
 function toBool(s) { return /^(true|da|yes|1)$/i.test((s || '').trim()); }
 function toMulti(s) {
   s = (s || '').trim(); if (!s) return [];
@@ -166,7 +176,7 @@ function readExport(files) {
   parseOffences(recs, ['predmeti']);
   numberDetainees(recs, ['pritvori', 'jemstva', 'nadzor']);
   report.merged = mr.merged;
-  for (const t of mr.unmatched) report.warnings.push(`Ponovljeni postupak ${t}: izvorni predmet nije pronađen – uvezen kao poseban predmet`);
+  for (const t of mr.unmatched) report.warnings.push(`Ponovljeni postupak ${t}: izvorni predmet nije pronađen – uvezen kao poseban predmet, označen kao ponovljeni`);
   const choices = {};
   const add = (key, vals) => { const cur = choices[key] || [...(Schema.FALLBACK_CHOICES[key] || [])]; for (const v of vals) if (v && !cur.includes(v)) cur.push(v); choices[key] = cur; };
   if (found._razlozi) choices['odlaganja.Razlogodlaganja'] = found._razlozi.rows.map(r => r['Naziv prikaza'].trim()).filter(Boolean);

@@ -13,6 +13,11 @@ let win, store, auth, fsdb, sync, config, online = true, timer;
 // pokrenuto iz preuzete nove verzije: samo zamijeni fajlove u folderu aplikacije i pokreni je
 const ZAMJENA = process.argv.indexOf('--zamijeni');
 if (ZAMJENA >= 0) require('./updater').zamijeni(process.argv.slice(ZAMJENA + 1), { app, dialog, BrowserWindow });
+// testovi iz izvornog koda rade u posebnom folderu, da ne diraju prave podatke
+if (!app.isPackaged && process.env.TM_USER_DATA) app.setPath('userData', process.env.TM_USER_DATA);
+// samo jedna otvorena aplikacija na racunaru; drugo pokretanje samo prikaze postojeci prozor
+if (ZAMJENA < 0 && !app.requestSingleInstanceLock()) app.exit(0);
+app.on('second-instance', () => { if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); } });
 const SYNC_EVERY_MS = 5 * 60 * 1000;
 
 // podaci iz starog foldera (prije promjene imena)
@@ -33,7 +38,8 @@ function loadConfig() {
   return { ...readJson(base), ...readJson(userCfgFile()) };
 }
 const isConfigured = c => /^[a-z0-9-]{4,40}$/.test(c.projectId || '') && /^AIza[\w-]{30,}$/.test(c.apiKey || '');
-const crypt = { enc: s => safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(s) : Buffer.from(s), dec: b => safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(b) : b.toString('utf8') };
+// prijava se cuva samo sifrovana (Windows zastita); ako sifrovanje nije dostupno, ne cuva se i trazi se ponovna prijava
+const crypt = { ok: () => safeStorage.isEncryptionAvailable(), enc: s => safeStorage.encryptString(s), dec: b => safeStorage.decryptString(b) };
 
 function send(ch, data) { if (win && !win.isDestroyed()) win.webContents.send(ch, data); }
 
@@ -52,7 +58,7 @@ function me() {
 function state() {
   const m = me();
   return { configured: isConfigured(config), projectId: config.projectId, me: m, isAdmin: !!(m && m.role === 'admin'), noAccess: !!(m && store.get('profile:' + m.email) === null),
-    online, pending: store.pending().length, conflicts: store.conflicts().length, lastSync: store.get('lastSync'), records: store.count(), version: app.getVersion(), updates: !!updateRepo() };
+    online, pending: store.pending(m ? m.email : undefined).length, conflicts: store.conflicts().length, lastSync: store.get('lastSync'), records: store.count(), version: app.getVersion(), updates: !!updateRepo() };
 }
 function effectiveForms() { const m = me(); const admin = !!(m && m.role === 'admin'); return (admin && store.get('formsDraft')) || store.get('forms') || null; }
 function requireAdmin() { if (!state().isAdmin) throw new Error('Ovo može samo administrator.'); }
@@ -92,9 +98,10 @@ function handlers() {
     return state();
   });
   ipcMain.handle('auth:logout', async () => {
-    if (store.pending().length) {
+    const moje = store.pending(me().email).length;
+    if (moje) {
       const r = await dialog.showMessageBox(win, { type: 'warning', buttons: ['Odustani', 'Odjavi se svejedno'], defaultId: 0, cancelId: 0,
-        message: `Imate ${store.pending().length} izmjena koje još nisu poslate na server.`, detail: 'Izmjene ostaju sačuvane na ovom računaru i biće poslate kada se ponovo prijavite.' });
+        message: `Imate ${moje} izmjena koje još nisu poslate na server.`, detail: 'Izmjene ostaju sačuvane na ovom računaru i biće poslate kada se ponovo prijavite.' });
       if (r.response !== 1) return state();
     }
     auth.logout();
@@ -135,11 +142,10 @@ function handlers() {
     if (!(Schema.LIST_BY_KEY[r.list] && Schema.LIST_BY_KEY[r.list].isCase)) throw new Error('Briše se samo cijeli predmet; ostali unosi se mijenjaju.');
     const children = store.allRecords().filter(x => x.fields.Predmet === id);
     if (!state().isAdmin) {
-      const mine = x => !x.remote || x.owner === me().email;
+      const mine = x => x.owner ? x.owner === me().email : !x.remote;
       if (!mine(r)) throw new Error('Možete obrisati samo predmet koji ste sami unijeli. Ovaj predmet može obrisati administrator.');
-      if (children.some(x => !mine(x))) throw new Error('Predmet ima unose drugih monitora. Obrisati ga može administrator.');
     }
-    store.batch(() => { for (const x of children) store.markDeleted(x.id); store.markDeleted(id); });
+    store.batch(() => { for (const x of children) store.markDeleted(x.id, me().email); store.markDeleted(id, me().email); });
     store.flushNow(); scheduleSync();
     return true;
   });
@@ -150,7 +156,7 @@ function handlers() {
     const lists = Schema.LISTS.filter(l => l.module === module).map(l => l.key);
     if (!lists.length) throw new Error('Nepoznat modul.');
     let n = 0;
-    store.batch(() => { for (const k of lists) for (const r of store.records(k)) { store.markDeleted(r.id); n++; } });
+    store.batch(() => { for (const k of lists) for (const r of store.records(k)) { store.markDeleted(r.id, me().email); n++; } });
     store.log('info', `Obrisani svi unosi modula ${(Schema.MODULES.find(m => m.key === module) || {}).title || module} (${n}).`);
     store.flushNow(); scheduleSync();
     return n;

@@ -58,8 +58,9 @@ function procesiIz(folder) {
 }
 // veliki fajlovi (Chromium) su isti u svim verzijama: dovoljno je uporediti velicinu, pocetak i kraj
 const dio = (f, pos, n) => { const fd = fs.openSync(f, 'r'); try { const b = Buffer.alloc(n); fs.readSync(fd, b, 0, n, pos); return b; } finally { fs.closeSync(fd); } };
+let brzo = false;   // brzo poredjenje samo kad je Electron isti u staroj i novoj verziji
 const isti = (a, b) => { try { const x = fs.statSync(a), y = fs.statSync(b); if (x.size !== y.size) return false;
-  if (x.size <= 2 * 1024 * 1024) return fs.readFileSync(a).equals(fs.readFileSync(b));
+  if (!brzo || x.size <= 2 * 1024 * 1024) return fs.readFileSync(a).equals(fs.readFileSync(b));
   const n = 65536; return dio(a, 0, n).equals(dio(b, 0, n)) && dio(a, x.size - n, n).equals(dio(b, y.size - n, n)); } catch { return false; } };
 // kopira samo ono sto se razlikuje; zakljucan fajl se preimenuje (.staro) pa se upisuje novi
 function kopiraj(src, dst, stat) {
@@ -91,6 +92,9 @@ async function zamijeni([installDir, pid, staroExe], { app, dialog, BrowserWindo
     }
     if (!installDir || !fs.existsSync(installDir)) throw new Error('Folder aplikacije nije pronađen.');
     zapis(`zamjena ${src} -> ${installDir}`);
+    const ev = d => { try { return JSON.parse(fs.readFileSync(path.join(d, 'resources', 'app', 'package.json'), 'utf8')).electron || null; } catch { return null; } };
+    brzo = !!ev(src) && ev(src) === ev(installDir);
+    zapis(`electron ${ev(installDir) || '?'} -> ${ev(src) || '?'}${brzo ? '' : ', poredim cijele fajlove'}`);
     for (let i = 0; i < 240 && ziv(Number(pid)); i++) await pauza(500);
     for (let i = 0; i < 20; i++) { const n = await procesiIz(installDir); if (n <= 0) break; if (i % 5 === 0) zapis(`jos ${n} procesa iz starog foldera`); await pauza(1000); }
     await pauza(1000);

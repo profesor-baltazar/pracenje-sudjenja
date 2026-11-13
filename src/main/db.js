@@ -21,7 +21,10 @@ class Store {
       CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
       CREATE TABLE IF NOT EXISTS log (ts TEXT, level TEXT, msg TEXT);`);
     // kolona owner je dodata kasnije
-    if (!s.all('PRAGMA table_info(records)').some(c => c.name === 'owner')) s.db.run('ALTER TABLE records ADD COLUMN owner TEXT');
+    const kol = s.all('PRAGMA table_info(records)').map(c => c.name);
+    if (!kol.includes('owner')) s.db.run('ALTER TABLE records ADD COLUMN owner TEXT');
+    // ko je napravio neposlatu izmjenu (vise korisnika na istom Windows nalogu)
+    if (!kol.includes('dirty_by')) s.db.run('ALTER TABLE records ADD COLUMN dirty_by TEXT');
     s.flushNow();
     return s;
   }
@@ -53,23 +56,24 @@ class Store {
   allRecords() { return this.all('SELECT * FROM records WHERE deleted=0').map(Store.row); }
   count() { return this.one('SELECT COUNT(*) n FROM records WHERE deleted=0').n; }
   byId(id) { return Store.row(this.one('SELECT * FROM records WHERE id=?', [id])); }
-  pending() { return this.all('SELECT * FROM records WHERE dirty=1').map(Store.row); }
+  // neposlate izmjene; sa e-mailom samo one koje je napravio taj korisnik (stare bez oznake idu prvom koji se prijavi)
+  pending(email) { return (email ? this.all('SELECT * FROM records WHERE dirty=1 AND (dirty_by IS NULL OR dirty_by=?)', [email]) : this.all('SELECT * FROM records WHERE dirty=1')).map(Store.row); }
   conflicts() { return this.all('SELECT * FROM records WHERE conflict IS NOT NULL').map(Store.row); }
 
   saveLocal(list, id, fields, user, opts = {}) {
     const now = new Date().toISOString();
     if (id && this.byId(id)) {
-      this.run('UPDATE records SET fields=?, dirty=1, modified_by=?, modified_at=? WHERE id=?', [JSON.stringify(fields), user, now, id]);
+      this.run('UPDATE records SET fields=?, dirty=1, modified_by=?, modified_at=?, dirty_by=? WHERE id=?', [JSON.stringify(fields), user, now, opts.owner || null, id]);
       return this.byId(id);
     }
     const nid = id || crypto.randomUUID();
-    this.run('INSERT INTO records(id,list,fields,dirty,created_by,modified_by,modified_at,owner) VALUES(?,?,?,1,?,?,?,?)', [nid, list, JSON.stringify(fields), opts.createdBy || user, user, now, opts.owner || null]);
+    this.run('INSERT INTO records(id,list,fields,dirty,created_by,modified_by,modified_at,owner,dirty_by) VALUES(?,?,?,1,?,?,?,?,?)', [nid, list, JSON.stringify(fields), opts.createdBy || user, user, now, opts.owner || null, opts.owner || null]);
     return this.byId(nid);
   }
-  markDeleted(id) {
+  markDeleted(id, email = null) {
     const r = this.byId(id); if (!r) return;
     if (!r.remote) this.run('DELETE FROM records WHERE id=?', [id]);
-    else this.run('UPDATE records SET deleted=1, dirty=1 WHERE id=?', [id]);
+    else this.run('UPDATE records SET deleted=1, dirty=1, dirty_by=? WHERE id=?', [email, id]);
   }
 
   upsertFromServer(list, id, etag, fields, info, deleted) {

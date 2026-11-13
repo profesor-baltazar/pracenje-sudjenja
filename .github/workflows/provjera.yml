@@ -12,5 +12,13 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
       - run: npm ci
       - run: npm test
+      - name: Pravila na Firestore emulatoru
+        run: |
+          npm install --no-save --no-audit --no-fund firebase-tools@14 @firebase/rules-unit-testing@4 firebase@11
+          npx firebase emulators:exec --only firestore --project pravila-test "node test/pravila-emulator.js"

@@ -1,6 +1,7 @@
 const { _electron } = require('playwright-core');
 (async () => {
-  const app = await _electron.launch({ executablePath: require('electron'), args: [process.env.TM_APP || '.', '--no-sandbox'] });
+  const dir = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'tm-podaci-'));
+  const app = await _electron.launch({ executablePath: require('electron'), args: [process.env.TM_APP || '.', '--no-sandbox'], env: { ...process.env, TM_USER_DATA: dir } });
   const w = await app.firstWindow(); const errs = [];
   w.on('pageerror', e => errs.push(e.message)); w.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
   await w.locator('text=Pristupni podaci').or(w.locator('text=Praćenje suđenja')).first().waitFor({ timeout: 20000 });
@@ -14,5 +15,5 @@ const { _electron } = require('playwright-core');
   await w.waitForSelector('text=Ponovite lozinku');
   if (process.argv[2]) await w.screenshot({ path: process.argv[2] });
   console.log('OK (' + (process.env.TM_APP || 'izvorni kod') + '); lang=' + await w.evaluate(() => navigator.language) + '; errors=' + JSON.stringify(errs));
-  await app.close();
+  await app.close(); require('fs').rmSync(dir, { recursive: true, force: true });
 })().catch(e => { console.error('SMOKE FAIL', e.message); process.exit(1); });

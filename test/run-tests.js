@@ -422,6 +422,32 @@ test('Nasilje nad ženama: više žrtava u jednom predmetu', () => {
   assert(S.fieldsOf('vaw_predmeti').filter(f => ['odnos', 'prijavljivala', 'pridruzila'].includes(f.name)).every(f => f.hidden));
 });
 
+test('Neposlate izmjene pripadaju korisniku koji ih je napravio', async () => {
+  const st = await Store.open(path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tm-')), 'p.sqlite'));
+  st.saveLocal('predmeti', 'p1', { Title: 'Ks 1/26' }, 'Ana', { owner: 'ana@x.me' });
+  st.saveLocal('predmeti', 'p2', { Title: 'Ks 2/26' }, 'Ivo', { owner: 'ivo@x.me' });
+  assert.deepStrictEqual(st.pending('ana@x.me').map(r => r.id), ['p1']);
+  assert.deepStrictEqual(st.pending('ivo@x.me').map(r => r.id), ['p2']);
+  assert.strictEqual(st.pending().length, 2);
+  st.update('p1', { remote: true, dirty: false });
+  st.markDeleted('p1', 'ivo@x.me');
+  assert.deepStrictEqual(st.pending('ivo@x.me').map(r => r.id).sort(), ['p1', 'p2'], 'brisanje ide pod onim ko je obrisao');
+});
+
+test('Uvoz: datumi, brojevi i ponovljeni postupak bez izvornog predmeta', () => {
+  const I = require('../src/main/importer.js'), { mergeRetrials } = require('../src/main/retrials.js');
+  assert.strictEqual(I.toDate('2/30/2021'), undefined); assert.strictEqual(I.toDate('31.04.2023'), undefined);
+  assert.strictEqual(I.toDate('29.02.2024'), '2024-02-29'); assert.strictEqual(I.toDate('3/22/2021'), '2021-03-22');
+  assert.strictEqual(I.toNumber('1,000'), 1000); assert.strictEqual(I.toNumber('1,5'), 1.5); assert.strictEqual(I.toNumber('1.000,50'), 1000.5);
+  assert.strictEqual(I.toNumber('712.21'), 712.21); assert.strictEqual(I.toNumber('-45,463'), -45463); assert.strictEqual(I.toNumber('abc'), undefined);
+  const recs = { predmeti: [{ id: 'a', fields: { Title: 'Ks 1/20', sud: 'Viši sud' } }, { id: 'b', fields: { Title: 'Ks 9/24', napomenaBroja: 'ponovljeni', Ponovljenipostupak: true, sud: 'Viši sud' } }] };
+  const r = mergeRetrials(recs, '');
+  assert.deepStrictEqual(r.unmatched, ['Ks 9/24']);
+  const b = recs.predmeti.find(c => c.id === 'b');
+  assert.strictEqual(b.fields.Ponovljenipostupak, true, 'ostaje označen kao ponovljeni');
+  assert.match(b.fields.napomenaBroja, /izvorni predmet nije pronađen/);
+});
+
 const AS_DIR = process.env.TM_APPSHEET_DIR || path.join(__dirname, 'podaci', 'appsheet');
 const AS = [path.join(AS_DIR, 'form_uvid.xlsx'), path.join(AS_DIR, 'form_rocista.xlsx')];
 if (fs.existsSync(AS[0])) test('AppSheet uvoz: brojevi se poklapaju sa izvještajima', async () => {
@@ -487,6 +513,7 @@ function fakeFirebase() {
     const verified = email && users[email].verified, isUser = verified && !!role(email), isAdmin = isUser && role(email) === 'admin';
     const p = decodeURIComponent(u.pathname).replace('/v1/projects/p1/databases/(default)/documents', '');
     const LISTS = { includes: c => S.LISTS.some(l => l.key === c) || /^x_[a-z0-9_]{1,48}$/.test(c) };
+    const CASE_OF = {}; for (const sp of S.SPACES) { const ls = S.listsOf(sp.key), c = ls.find(l => l.isCase); for (const l of ls) if (l !== c) CASE_OF[l.key] = c.key; }
     const canRead = (col, id) => LISTS.includes(col) ? isUser : col === 'users' ? isUser || (verified && id === email) : col === 'meta' ? isUser : false;
     if (p === ':commit') {
       const res = [];
@@ -500,7 +527,8 @@ function fakeFirebase() {
         if (pre.updateTime && (!cur || cur.updateTime !== pre.updateTime)) return err(400, 'FAILED_PRECONDITION');
         let ok;
         const after = w.updateMask && cur ? { ...cur.data, ...data } : data, own = d => (d && d._owner) || '';
-        if (LISTS.includes(col)) ok = isUser && (cur ? own(after) === own(cur.data) && (after._deleted !== true || isAdmin || own(cur.data) === email) && (cur.data._deleted !== true || isAdmin)
+        const caseOwn = d => { const cc = CASE_OF[col]; const p = cc && d && d.Predmet && docs.get(cc + '/' + d.Predmet); return p ? own(p.data) : ''; };
+        if (LISTS.includes(col)) ok = isUser && (cur ? own(after) === own(cur.data) && (after._deleted !== true || isAdmin || own(cur.data) === email || caseOwn(cur.data) === email) && (cur.data._deleted !== true || isAdmin)
           : after._deleted !== true && (!own(after) || own(after) === email));
         else if (col === 'users') ok = isAdmin || (verified && id === email && data.role === 'admin' && !docs.has('meta/bootstrap') && body.writes.some(x => x.update && x.update.name.endsWith('meta/bootstrap')));
         else if (col === 'meta') ok = isAdmin || (id === 'bootstrap' && verified && data.by === email);
@@ -599,6 +627,13 @@ test('Firebase: rad van mreže, uvoz u paketima, drugi korisnik, konflikt, brisa
   await ana.sync.run(); ana.store.markDeleted(svoj.id);
   s = await ana.sync.run(); assert.strictEqual(s.state, 'ok', s.error);
   assert.strictEqual(fb.docs.get('odlaganja/' + svoj.id).data._deleted, true);
+  // autor predmeta briše i unos drugog korisnika u svom predmetu, ali ne u tuđem
+  await adm.sync.run();
+  const odAdm = adm.store.saveLocal('odlaganja', null, { Predmet: c.id }, 'Vladimir', { owner: 'admin@x.me' });
+  await adm.sync.run(); await ana.sync.run();
+  assert.strictEqual(fb.docs.get('predmeti/' + c.id).data._owner, 'ana@x.me');
+  ana.store.markDeleted(odAdm.id, 'ana@x.me'); s = await ana.sync.run(); assert.strictEqual(s.state, 'ok', s.error);
+  assert.strictEqual(fb.docs.get('odlaganja/' + odAdm.id).data._deleted, true);
   await adm.sync.run();
   adm.store.markDeleted(t.id); adm.store.markDeleted(c.id);
   s = await adm.sync.run(); assert.strictEqual(s.state, 'ok', s.error);

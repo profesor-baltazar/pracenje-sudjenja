@@ -35,15 +35,20 @@ service cloud.firestore {
                     && existsAfter(/databases/$(db)/documents/users/$(me()));
     }
 
-    // monitor moze da brise samo svoje zapise (_owner)
+    // monitor moze da brise samo svoje zapise (_owner), a autor predmeta i sve unose u svom predmetu
     function owner(d) { return d.get('_owner', ''); }
+    function caseCol() { return {'faze': 'predmeti', 'odlaganja': 'predmeti', 'mjere': 'predmeti', 'presuda1': 'predmeti', 'zalba': 'predmeti', 'presuda2': 'predmeti', 'ishod': 'predmeti', 'pritvori': 'predmeti', 'jemstva': 'predmeti', 'nadzor': 'predmeti', 'vpl': 'predmeti', 'komentari': 'predmeti', 'roc_rocista': 'roc_predmeti', 'svi_faze': 'svi_predmeti', 'svi_odlaganja': 'svi_predmeti', 'svi_mjere': 'svi_predmeti', 'svi_presuda1': 'svi_predmeti', 'svi_zalba': 'svi_predmeti', 'svi_ishod': 'svi_predmeti', 'svi_pritvori': 'svi_predmeti', 'svi_jemstva': 'svi_predmeti', 'svi_nadzor': 'svi_predmeti', 'svi_vpl': 'svi_predmeti', 'svi_komentari': 'svi_predmeti', 'svir_rocista': 'svir_predmeti'}; }
+    function caseOwner(col, d) {
+      return col in caseCol() && d.get('Predmet', '') is string && d.get('Predmet', '') != ''
+        ? owner(get(/databases/$(db)/documents/$(caseCol()[col])/$(d.Predmet)).data) : '';
+    }
     match /{col}/{id} {
       allow read: if isList(col) && isUser();
       allow create: if isList(col) && isUser() && request.resource.data._deleted != true
                     && (owner(request.resource.data) == '' || owner(request.resource.data) == me());
       allow update: if isList(col) && isUser()
                     && owner(request.resource.data) == owner(resource.data)
-                    && (request.resource.data._deleted != true || isAdmin() || owner(resource.data) == me())
+                    && (request.resource.data._deleted != true || isAdmin() || owner(resource.data) == me() || caseOwner(col, resource.data) == me())
                     && (resource.data._deleted != true || isAdmin());
       allow delete: if false;
     }
