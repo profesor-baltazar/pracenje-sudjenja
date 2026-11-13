@@ -282,3 +282,6 @@ table.grid { width: 100%; border-collapse: collapse; }
 
 .updbar { margin: 8px 12px 6px; padding: 10px 12px; border-radius: 8px; background: rgba(238,144,61,.16); border: 1px solid rgba(238,144,61,.55); color: #fff; display: flex; gap: 10px; align-items: center; justify-content: space-between; }
 .updbar .small { color: #d7deea; }
+
+.me .ver { margin-top: 6px; font-size: 12px; opacity: .6; }
+.ver-login { font-size: 13px; font-weight: 400; color: var(--muted); margin-left: 6px; }

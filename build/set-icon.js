@@ -12,9 +12,10 @@ ResEdit.Resource.IconGroupEntry.replaceIconsForResource(res.entries, gid, lang, 
 const vi = ResEdit.Resource.VersionInfo.fromEntries(res.entries)[0] || ResEdit.Resource.VersionInfo.createEmpty();
 const [a, b, c] = ver.split('.').map(Number);
 vi.setFileVersion(a, b, c, 0, 1033); vi.setProductVersion(a, b, c, 0, 1033);
-vi.setStringValues({ lang: 1033, codepage: 1200 }, {
-  CompanyName: 'CeMI', ProductName: 'Praćenje suđenja', FileDescription: 'Praćenje suđenja', InternalName: 'Praćenje suđenja',
-  OriginalFilename: 'Praćenje suđenja.exe', LegalCopyright: '© CeMI', FileVersion: ver, ProductVersion: ver });
+const L = { lang: 1033, codepage: 1200 };
+vi.setStringValues(L, { ProductName: 'Praćenje suđenja', FileDescription: 'Praćenje suđenja', InternalName: 'Praćenje suđenja',
+  OriginalFilename: 'Praćenje suđenja.exe', FileVersion: ver, ProductVersion: ver });
+for (const k of ['CompanyName', 'LegalCopyright', 'LegalTrademarks', 'Comments', 'SquirrelAwareVersion']) vi.removeStringValue(L, k);
 vi.outputToResourceEntries(res.entries);
 res.outputResource(pe);
 fs.writeFileSync(exe, Buffer.from(pe.generate()));

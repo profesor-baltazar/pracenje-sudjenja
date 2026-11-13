@@ -261,7 +261,7 @@ function viewLogin() {
   };
   const key = ev => { if (ev.key === 'Enter') submit(); };
   return h('div', { class: 'center' }, h('div', { class: 'card login' },
-    h('img', { src: 'logo.png', alt: 'CeMI', class: 'loginlogo' }), h('h1', {}, 'Praćenje suđenja'), h('p', {}, m === 'register' ? 'Registracija novog korisnika' : m === 'reset' ? 'Nova lozinka' : 'Prijava'),
+    h('img', { src: 'logo.png', alt: 'CeMI', class: 'loginlogo' }), h('h1', {}, 'Praćenje suđenja', h('span', { class: 'ver-login' }, ` ${st.app.version || ''}`)), h('p', {}, m === 'register' ? 'Registracija novog korisnika' : m === 'reset' ? 'Nova lozinka' : 'Prijava'),
     field('E-mail', h('input', { type: 'text', value: login.email, 'data-key': 'login.email', autocomplete: 'username', oninput: e => login.email = e.target.value, onkeydown: key })),
     m !== 'reset' ? field('Lozinka', h('input', { type: 'password', value: login.password, 'data-key': 'login.pw', autocomplete: m === 'register' ? 'new-password' : 'current-password', oninput: e => login.password = e.target.value, onkeydown: key }),
       m === 'register' ? 'Najmanje 6 znakova.' : null) : null,
@@ -306,7 +306,8 @@ function viewShell() {
       st.app.isAdmin ? nav(st.view === 'forms', 'Uređivanje formi', () => go('forms'), st.data && st.data.formsDraft ? h('span', { class: 'badge orange', title: 'Nacrt nije objavljen' }, 'nacrt') : null) : null,
       h('div', { class: 'grow' }),
       h('div', { class: 'me' }, h('b', {}, st.app.me.name), st.app.isAdmin ? h('span', { class: 'badge blue' }, 'Administrator') : h('span', {}, 'Monitor'), h('br'),
-        h('a', { onclick: async () => { if (!(await leaveEdit())) return; st.app = await api.logout(); render(); } }, 'Odjava'))),
+        h('a', { onclick: async () => { if (!(await leaveEdit())) return; st.app = await api.logout(); render(); } }, 'Odjava'),
+        h('div', { class: 'ver' }, `Verzija ${st.app.version}`))),
     h('main', { class: 'main' }, st.app.noAccess ? viewNoAccess() : st.view === 'case' ? viewCase() : st.view === 'stats' ? viewStats() : st.view === 'report' ? viewReport() : st.view === 'sync' ? viewSync()
       : st.view === 'admin' && st.app.isAdmin ? viewAdmin() : st.view === 'forms' && st.app.isAdmin ? viewForms() : viewCases()));
 }
