@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
-const DIR = 'Pracenje sudjenja', EXE = 'Pracenje sudjenja.exe';
+const DIRS = ['Praćenje suđenja', 'Pracenje sudjenja'], EXES = ['Praćenje suđenja.exe', 'Pracenje sudjenja.exe'];
 
 const cmp = (a, b) => { const x = String(a).replace(/^v/, '').split('.').map(Number), y = String(b).replace(/^v/, '').split('.').map(Number);
   for (let i = 0; i < 3; i++) { const d = (x[i] || 0) - (y[i] || 0); if (d) return d > 0 ? 1 : -1; } return 0; };
@@ -36,17 +36,19 @@ async function install(info, { appExe, onProgress, onQuit }) {
   fs.writeFileSync(zip, Buffer.concat(chunks.map(c => Buffer.from(c))));
   // raspakivanje preko powershell-a
   await ps(`Expand-Archive -LiteralPath '${zip.replace(/'/g, "''")}' -DestinationPath '${out.replace(/'/g, "''")}' -Force`);
-  const src = fs.existsSync(path.join(out, DIR)) ? path.join(out, DIR) : out;
-  if (!fs.existsSync(path.join(src, EXE))) throw new Error('Preuzeti ZIP nema očekivani sadržaj.');
+  const src = DIRS.map(d => path.join(out, d)).find(d => fs.existsSync(d)) || out;
+  const novi = EXES.find(e => fs.existsSync(path.join(src, e)));
+  if (!novi) throw new Error('Preuzeti ZIP nema očekivani sadržaj.');
   // ceka da se aplikacija zatvori, kopira novu verziju i pokrece je
-  const bat = path.join(tmp, 'azuriraj.cmd'), pid = process.pid, exe = path.join(installDir, EXE);
-  fs.writeFileSync(bat, [
-    '@echo off', 'chcp 65001 >nul',
-    ':cekaj', `tasklist /FI "PID eq ${pid}" | find "${pid}" >nul && (timeout /t 1 /nobreak >nul & goto cekaj)`,
-    `robocopy "${src}" "${installDir}" /E /R:5 /W:1 /NFL /NDL /NJH /NJS /NP >nul`,
-    `start "" "${exe}"`,
-    `rmdir /S /Q "${tmp}" >nul 2>&1`, ''].join('\r\n'), 'utf8');
-  spawn('cmd.exe', ['/c', bat], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+  const q = s => "'" + s.replace(/'/g, "''") + "'";
+  const skripta = path.join(tmp, 'azuriraj.ps1'), exe = path.join(installDir, novi), staro = appExe;
+  fs.writeFileSync(skripta, '\ufeff' + [
+    `while (Get-Process -Id ${process.pid} -ErrorAction SilentlyContinue) { Start-Sleep -Seconds 1 }`,
+    `robocopy ${q(src)} ${q(installDir)} /E /R:5 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null`,
+    path.resolve(staro) !== path.resolve(exe) ? `Remove-Item -LiteralPath ${q(staro)} -Force -ErrorAction SilentlyContinue` : '',
+    `Start-Process -FilePath ${q(exe)}`,
+    `Remove-Item -LiteralPath ${q(tmp)} -Recurse -Force -ErrorAction SilentlyContinue`, ''].join('\r\n'), 'utf8');
+  spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', skripta], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
   onQuit();
 }
 

@@ -180,7 +180,7 @@ function readExport(files) {
   const titleOf = id => (recs.predmeti.find(p => p.id === id) || { fields: {} }).fields.Title;
   for (const l of OKK()) for (const r of recs[l.key]) {
     const ctx = {};
-    if (l.key === 'presuda1' || l.key === 'presuda2') ctx.lastAdjournedTo = recs.odlaganja.filter(o => o.fields.Predmet === r.fields.Predmet).map(o => o.fields.Odlo_x017e_enodo).filter(Schema.isDate).sort().pop();
+    if (l.key === 'presuda1' || l.key === 'presuda2') ctx.lastAdjournedTo = recs.odlaganja.filter(o => o.fields.Predmet === r.fields.Predmet && (o.fields.faza || 1) === (r.fields.faza || 1)).map(o => o.fields.Odlo_x017e_enodo).filter(Schema.isDate).sort().pop();
     const v = Schema.validate(l.key, r.fields, ctx);
     for (const [name, msg] of Object.entries(v.errors)) {
       if (msg === 'Obavezno polje.') continue;

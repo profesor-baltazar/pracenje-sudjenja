@@ -19,19 +19,26 @@ const ExcelJS = require('exceljs'); new ExcelJS.Workbook(); console.log('moduli 
 rm -rf ~/.config/pracenje-sudjenja ~/.config/"Praćenje suđenja"
 if command -v xvfb-run >/dev/null; then (TM_APP="$ISO/app" xvfb-run -a node test/smoke-electron.js); fi
 rm -rf ~/.config/pracenje-sudjenja ~/.config/"Praćenje suđenja" "$ISO"
-OUT=dist/portable/"Pracenje sudjenja"; rm -rf dist/portable && mkdir -p "$OUT"
+OUT=dist/portable/"Praćenje suđenja"; rm -rf dist/portable && mkdir -p "$OUT"
 unzip -q "$ZIP" -d "$OUT"
-mv "$OUT/electron.exe" "$OUT/Pracenje sudjenja.exe"
+mv "$OUT/electron.exe" "$OUT/Praćenje suđenja.exe"
 [ -d build/tools/node_modules/resedit ] || (cd build/tools && npm install resedit@2 --no-audit --no-fund --loglevel=error)
-node build/set-icon.js "$OUT/Pracenje sudjenja.exe" build/icon.ico "$VER"
+node build/set-icon.js "$OUT/Praćenje suđenja.exe" build/icon.ico "$VER"
 rm -f "$OUT/resources/default_app.asar"
 cp -r build/app "$OUT/resources/app"
 cp config.json "$OUT/resources/config.json"
 cat > "$OUT/PROCITAJ.txt" <<'TXT'
-1. Raspakujte cijeli folder "Pracenje sudjenja", npr. u Dokumente.
-2. Pokrenite "Pracenje sudjenja.exe".
+1. Raspakujte cijeli folder "Praćenje suđenja", npr. u Dokumente.
+2. Pokrenite "Praćenje suđenja.exe".
    Ako Windows prikaže "Windows protected your PC": More info -> Run anyway.
 3. Nove verzije aplikacija nudi sama.
 TXT
-(cd dist/portable && rm -f "../Pracenje-sudjenja-$VER.zip" && zip -qr "../Pracenje-sudjenja-$VER.zip" "Pracenje sudjenja")
+rm -f "dist/Pracenje-sudjenja-$VER.zip"
+python3 - "dist/Pracenje-sudjenja-$VER.zip" <<'PY'
+import os, sys, zipfile
+with zipfile.ZipFile(sys.argv[1], 'w', zipfile.ZIP_DEFLATED) as z:
+    for root, _, files in os.walk('dist/portable'):
+        for f in files:
+            full = os.path.join(root, f); z.write(full, os.path.relpath(full, 'dist/portable'))
+PY
 ls -la "dist/Pracenje-sudjenja-$VER.zip"

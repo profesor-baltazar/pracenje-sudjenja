@@ -234,7 +234,7 @@
           return isDate(r.Datumrje_x0161_enjaopotvr_x0111_) && isDate(r.Datumnaredbezaodr_x017e_avanjegl) && r.Datumnaredbezaodr_x017e_avanjegl > addMonths(r.Datumrje_x0161_enjaopotvr_x0111_, 2)
             ? { warn: 'Glavni pretres nije određen u roku od dva mjeseca od potvrđivanja optužnice (čl. 304 st. 2).' } : null; } },
       { name: 'Datumzakazivanjaprvogro_x010d_i_', label: 'Datum zakazivanja prvog ročišta', type: 'date',
-        check: r => days(r.Datumnaredbezaodr_x017e_avanjegl, r.Datumzakazivanjaprvogro_x010d_i_) <= 0 ? 'Prvo ročište mora biti nakon dana naredbe za održavanje glavnog pretresa.' : null },
+        check: r => (days(r.Datumnaredbezaodr_x017e_avanjegl, r.Datumzakazivanjaprvogro_x010d_i_) ?? 1) <= 0 ? 'Prvo ročište mora biti nakon dana naredbe za održavanje glavnog pretresa.' : null },
       { name: 'Brojodr_x017e_anihro_x010d_i_x01', label: 'Broj održanih ročišta', type: 'number' },
       { name: 'Brojodlo_x017e_enihro_x010d_i_x0', label: 'Broj odloženih ročišta', type: 'number',
         check: (r, ctx) => { const n = ctx && ctx.odlaganjaCount;
@@ -263,7 +263,7 @@
         const n = (ctx.odlaganjaCount || 0) + (ctx.editId ? 0 : 1), b = Number(ctx.brojOdlozenih) || 0, gdje = (r.faza || 1) > 1 ? '„Podaci o ponovljenom suđenju”' : '„Osnovni podaci”';
         if (!b) return { warn: `U koraku ${gdje} nije upisan broj odloženih ročišta. Vratite se na taj korak i upišite ga.` };
         return n > b ? { warn: `U koraku ${gdje} je upisano ${b} odloženih ročišta, a ovo je ${n}. odlaganje. Vratite se na taj korak i ispravite broj.` } : null; } },
-    { name: 'Odlo_x017e_enodo', label: 'Odloženo do (novi datum ročišta)', type: 'date', check: r => days(r.Odlo_x017e_enood, r.Odlo_x017e_enodo) <= 0 ? 'Novi datum mora biti nakon datuma odlaganja.' : null },
+    { name: 'Odlo_x017e_enodo', label: 'Odloženo do (novi datum ročišta)', type: 'date', check: r => (days(r.Odlo_x017e_enood, r.Odlo_x017e_enodo) ?? 1) <= 0 ? 'Novi datum mora biti nakon datuma odlaganja.' : null },
     { name: 'Razlogodlaganja', label: 'Razlog odlaganja', type: 'choice' },
     { name: 'Detalji', label: 'Detalji', type: 'longtext' }];
   const mjereForm = t => [P(t),
@@ -553,7 +553,7 @@
       { section: 'Ročište' },
       R('datum', 'Datum održavanja ročišta', 'date', null, { required: true }),
       R('odrzano', 'Ročište je održano', 'bool'),
-      R('datumNarednog', 'Datum narednog ročišta', 'date', null, { check: r => days(r.datum, r.datumNarednog) <= 0 ? 'Naredno ročište mora biti nakon ovog.' : null }),
+      R('datumNarednog', 'Datum narednog ročišta', 'date', null, { check: r => (days(r.datum, r.datumNarednog) ?? 1) <= 0 ? 'Naredno ročište mora biti nakon ovog.' : null }),
       { break: true },
       R('togaSudija', 'Sudija nosi togu', 'bool'), R('togaTuzilac', 'Tužilac nosi togu', 'bool'),
       { section: 'Poštovanje procesnih prava' },
@@ -624,7 +624,7 @@
     caseNoField('brojPredmeta', 'Broj predmeta u ponovljenom postupku'),
     { name: 'Datumnaredbezaodr_x017e_avanjegl', label: 'Datum naredbe za održavanje glavnog pretresa', type: 'date' },
     { name: 'Datumzakazivanjaprvogro_x010d_i_', label: 'Datum zakazivanja prvog ročišta', type: 'date',
-      check: r => days(r.Datumnaredbezaodr_x017e_avanjegl, r.Datumzakazivanjaprvogro_x010d_i_) <= 0 ? 'Prvo ročište mora biti nakon dana naredbe za održavanje glavnog pretresa.' : null },
+      check: r => (days(r.Datumnaredbezaodr_x017e_avanjegl, r.Datumzakazivanjaprvogro_x010d_i_) ?? 1) <= 0 ? 'Prvo ročište mora biti nakon dana naredbe za održavanje glavnog pretresa.' : null },
     { name: 'Brojodr_x017e_anihro_x010d_i_x01', label: 'Broj održanih ročišta u ponovljenom suđenju', type: 'number' },
     { name: 'Brojodlo_x017e_enihro_x010d_i_x0', label: 'Broj odloženih ročišta u ponovljenom suđenju', type: 'number' },
     { name: 'napomena', label: 'Napomena', type: 'longtext' }];
