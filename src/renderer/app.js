@@ -59,12 +59,15 @@ function statData(module) {
   d._refDate = st.refDate;
   return d;
 }
+const drugiOtvoren = {};
 const zatvorIzrecen = x => /zatvor/i.test(x.glavnaSankcija || '');
 const optNaslov = (x, i) => `Optuženi ${i + 1}${x.oznaka ? ' – ' + x.oznaka : ''}`;
 const PRAZAN_OPT = { oznaka: null, osudjivan: false, istovrsna: false, detaljiPresuda: null, glavnaSankcija: null, zatvorGodina: null, zatvorMjeseci: null, zatvorDana: null, mjeraBezbjednosti: null, sankcija: null };
 const GRUPE = {
-  zrtve: { of: c => S.zrtveOf(c), naslov: (x, i) => `Žrtva ${i + 1}`, dodaj: '+ Dodaj žrtvu', prazno: { odnos: null, prijavljivala: false, pridruzila: false },
-    polja: [['odnos', 'text', 'Odnos žrtve sa optuženim', { hint: 'npr. supruga, bivša vanbračna supruga, majka', cls: 'pola' }],
+  zrtve: { of: c => S.zrtveOf(c), naslov: (x, i) => `Žrtva ${i + 1}`, dodaj: '+ Dodaj žrtvu', prazno: { odnos: null, opisOdnosa: null, prijavljivala: false, pridruzila: false },
+    polja: [['odnos', 'combo', 'Odnos žrtve sa optuženim', { izbori: 'odnos', cls: 'pola', hint: 'Za lica koja nisu srodnici izaberite jednu od kategorija poznanstva (pređite mišem preko polja za objašnjenje). Ako odnos nije na listi, izaberite „Drugi odnos” i upišite ga.',
+        title: 'Blisko poznanstvo: prijatelji, komšije i druga lica sa kojima žrtva ima redovan i dugotrajan kontakt, a nije u srodstvu.\nPovršno poznanstvo: lica sa kojima je žrtva u kontaktu samo povremeno, bez dubljeg ličnog odnosa.\nProfesionalni odnos: poznaju se isključivo kroz posao.\nSlučajni kontakt: sreli su se jednom ili nekoliko puta, bez trajnijeg odnosa (npr. kupci u prodavnici, prolaznici).\nNepoznati: nijesu imali kontakt ni poznanstvo prije kritičnog događaja.' }],
+      ['opisOdnosa', 'text', 'Detaljniji opis odnosa (nije obavezno)', { hint: 'npr. maloljetna ćerka, sestra od tetke, komšinica' }],
       ['prijavljivala', 'bool', 'Žrtva je prethodno prijavljivala nasilje'], ['pridruzila', 'bool', 'Žrtva se pridružila krivičnom gonjenju']] },
   optuzeni: { of: c => S.optuzeniOf(c), naslov: optNaslov, dodaj: '+ Dodaj optuženog', prazno: PRAZAN_OPT,
     polja: [['oznaka', 'text', 'Oznaka optuženog (nije obavezno)', { hint: 'npr. 1. optuženi ili inicijali', cls: 'pola' }],
@@ -615,6 +618,12 @@ function input(f, list, d) {
         const inp = tip === 'longtext' ? h('textarea', { 'data-key': pk(i, n), oninput: e => upd(i, { [n]: e.target.value || null }) }, x[n] || '')
           : tip === 'choice' ? h('select', { 'data-key': pk(i, n), onchange: e => upd(i, { [n]: e.target.value || null }) }, h('option', { value: '' }, '— izaberite —'),
               [...new Set([...choicesOf(list, opt.izbori), ...(x[n] ? [x[n]] : [])])].map(o => h('option', { value: o, selected: x[n] === o }, o)))
+          : tip === 'combo' ? (() => { const opts = choicesOf(list, opt.izbori), drugi = !!x[n] && !opts.includes(x[n]), dk = pk(i, n) + '.drugi';
+              return h('div', { class: 'combo' },
+                h('select', { 'data-key': pk(i, n), title: opt.title || null, onchange: e => { const v = e.target.value; if (v === '__drugi') { drugiOtvoren[dk] = true; upd(i, { [n]: null }); } else { delete drugiOtvoren[dk]; upd(i, { [n]: v || null }); } } },
+                  h('option', { value: '' }, '— izaberite —'), opts.map(o => h('option', { value: o, selected: x[n] === o }, o)),
+                  h('option', { value: '__drugi', selected: drugi || (!x[n] && drugiOtvoren[dk]) }, 'Drugi odnos (upišite)…')),
+                drugi || drugiOtvoren[dk] ? h('input', { type: 'text', placeholder: 'Upišite odnos', value: drugi ? x[n] : '', 'data-key': dk, oninput: e => upd(i, { [n]: e.target.value || null }) }) : null); })()
           : tip === 'number' ? h('input', { type: 'number', min: 0, max: opt.max ?? null, step: 1, value: x[n] ?? '', 'data-key': pk(i, n), oninput: e => upd(i, { [n]: e.target.value === '' ? null : Number(e.target.value) }) })
           : h('input', { type: 'text', value: x[n] || '', 'data-key': pk(i, n), oninput: e => upd(i, { [n]: e.target.value || null }) });
         return h('div', { class: 'field grupa-polje' + (opt.cls ? ' ' + opt.cls : '') }, h('label', {}, lbl), inp, opt.hint ? h('div', { class: 'hint' }, opt.hint) : null);

@@ -180,6 +180,7 @@ table.grid { width: 100%; border-collapse: collapse; }
 
 .djela { display: flex; flex-direction: column; gap: 10px; }
 .zrtva-q { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-top: 8px; border-top: 1px solid var(--line); }
+.combo { display: flex; flex-direction: column; gap: 6px; }
 .grupa-polja { display: flex; flex-wrap: wrap; column-gap: 16px; row-gap: 8px; }
 .grupa-polja > * { flex: 1 1 100%; }
 .grupa-polje.pola { flex: 0 1 calc(50% - 8px); }

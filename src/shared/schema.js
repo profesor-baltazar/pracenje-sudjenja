@@ -71,6 +71,8 @@
     'odlaganja.Razlogodlaganja': RAZLOZI,
     'rocista.objasnio': ['Objasnio', 'Pročitao'], 'rocista.prekidRazlog': ['Radi pripremanja odbrane', 'Radi odmora', 'Drugo'],
     'rocista.dovodjenjeLice': ['Optuženi', 'Svjedok', 'Vještak', 'Oštećeni'],
+    'vaw_predmeti.odnos': ['Supruga', 'Bivša supruga', 'Vanbračna supruga', 'Bivša vanbračna supruga', 'Emotivna partnerka', 'Bivša emotivna partnerka', 'Majka', 'Ćerka', 'Sestra', 'Rođaci',
+      'Blisko poznanstvo', 'Površno poznanstvo', 'Profesionalni odnos', 'Slučajni kontakt', 'Nepoznati'],
     'vaw_predmeti.krivicnoDjelo': ['Nasilje u porodici ili u porodičnoj zajednici', 'Proganjanje', 'Nedozvoljene polne radnje', 'Seksualno uznemiravanje', 'Silovanje', 'Ugrožavanje sigurnosti'],
   };
   function choiceKeys(listKey, name) { return [`${listKey}.${name}`, `${baseKey(listKey)}.${name}`]; }
@@ -607,7 +609,7 @@
     { section: 'Podaci o žrtvama' },
     { name: 'zrtve', label: 'Žrtve', type: 'zrtve', wide: true },
     // stara polja (jedna zrtva po predmetu), ostaju zbog ranijih unosa
-    { name: 'odnos', label: 'Odnos žrtve sa optuženim', type: 'text', hidden: true },
+    { name: 'odnos', label: 'Odnos žrtve sa optuženim', type: 'choice', allowNew: true, hidden: true },
     { name: 'prijavljivala', label: 'Žrtva je prethodno prijavljivala nasilje', type: 'bool', hidden: true },
     { name: 'pridruzila', label: 'Žrtva se pridružila krivičnom gonjenju', type: 'bool', hidden: true },
     { section: 'Podaci o optuženima' },

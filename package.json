@@ -1,7 +1,7 @@
 {
   "name": "pracenje-sudjenja",
   "productName": "Praćenje suđenja",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Praćenje suđenja",
   "author": "CeMI",
   "main": "src/main/main.js",

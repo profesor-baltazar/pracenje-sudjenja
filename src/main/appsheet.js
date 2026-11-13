@@ -249,7 +249,8 @@ async function readAppSheet(files) {
       cilj[k] = `${cilj[k]}${['detaljiPresuda', 'olaksavajuce', 'otezavajuce', 'komentar'].includes(k) ? '\n' : ' / '}${v}`; } };
   for (const c of [...recs.vaw_predmeti]) {
     const f = c.fields, key = `${f.sud}|${f.Title}`, prva = vawIdx.get(key);
-    const z = { odnos: f.odnos || null, prijavljivala: !!f.prijavljivala, pridruzila: !!f.pridruzila };
+    const odn = Schema.fallbackChoices('vaw_predmeti', 'odnos').find(x => x.toLowerCase() === String(f.odnos || '').trim().toLowerCase());
+    const z = { odnos: odn || f.odnos || null, prijavljivala: !!f.prijavljivala, pridruzila: !!f.pridruzila };
     const o = { oznaka: null, ...Object.fromEntries(Schema.OPT_POLJA.map(k => [k, f[k] ?? null])) };
     o.osudjivan = !!o.osudjivan; o.istovrsna = !!o.istovrsna;
     for (const k of ['odnos', 'prijavljivala', 'pridruzila', ...Schema.OPT_POLJA]) delete f[k];
