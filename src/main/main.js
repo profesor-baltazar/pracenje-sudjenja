@@ -10,10 +10,14 @@ const { readAppSheet } = require('./appsheet');
 const Schema = require('../shared/schema.js');
 
 let win, store, auth, fsdb, sync, config, online = true, timer;
+// pokrenuto iz preuzete nove verzije: samo zamijeni fajlove u folderu aplikacije i pokreni je
+const ZAMJENA = process.argv.indexOf('--zamijeni');
+if (ZAMJENA >= 0) require('./updater').zamijeni(process.argv.slice(ZAMJENA + 1), { app, dialog });
 const SYNC_EVERY_MS = 5 * 60 * 1000;
 
 // podaci iz starog foldera (prije promjene imena)
 (function preseli() {
+  if (ZAMJENA >= 0) return;
   const novo = app.getPath('userData'), staro = path.join(app.getPath('appData'), 'Trial Monitoring');
   try {
     if (!fs.existsSync(novo) && fs.existsSync(staro)) fs.renameSync(staro, novo);
@@ -265,6 +269,8 @@ ipcMain.handle('update:install', async () => {
   return true;
 });
 app.whenReady().then(async () => {
+  if (ZAMJENA >= 0) return;
+  Updater.pocisti();
   Menu.setApplicationMenu(null);
   store = await Store.open(path.join(app.getPath('userData'), 'podaci.sqlite'));
   initServices();
@@ -275,4 +281,4 @@ app.whenReady().then(async () => {
   if (app.isPackaged && updateRepo()) setTimeout(() => checkUpdate().catch(() => {}), 15000);
   scheduleSync(1500);
 });
-app.on('window-all-closed', () => { if (store) store.flushNow(); app.quit(); });
+app.on('window-all-closed', () => { if (ZAMJENA >= 0) return; if (store) store.flushNow(); app.quit(); });

@@ -39,17 +39,45 @@ async function install(info, { appExe, onProgress, onQuit }) {
   const src = DIRS.map(d => path.join(out, d)).find(d => fs.existsSync(d)) || out;
   const novi = EXES.find(e => fs.existsSync(path.join(src, e)));
   if (!novi) throw new Error('Preuzeti ZIP nema očekivani sadržaj.');
-  // ceka da se aplikacija zatvori, kopira novu verziju i pokrece je
-  const q = s => "'" + s.replace(/'/g, "''") + "'";
-  const skripta = path.join(tmp, 'azuriraj.ps1'), exe = path.join(installDir, novi), staro = appExe;
-  fs.writeFileSync(skripta, '\ufeff' + [
-    `while (Get-Process -Id ${process.pid} -ErrorAction SilentlyContinue) { Start-Sleep -Seconds 1 }`,
-    `robocopy ${q(src)} ${q(installDir)} /E /R:5 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null`,
-    path.resolve(staro) !== path.resolve(exe) ? `Remove-Item -LiteralPath ${q(staro)} -Force -ErrorAction SilentlyContinue` : '',
-    `Start-Process -FilePath ${q(exe)}`,
-    `Remove-Item -LiteralPath ${q(tmp)} -Recurse -Force -ErrorAction SilentlyContinue`, ''].join('\r\n'), 'utf8');
-  spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', skripta], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+  // nova verzija sama ceka da se ova zatvori, kopira se preko nje i pokrece (bez powershell skripte)
+  zapis(`pokrecem ${path.join(src, novi)} -> ${installDir}`);
+  spawn(path.join(src, novi), ['--zamijeni', installDir, String(process.pid), appExe], { detached: true, stdio: 'ignore', cwd: src, windowsHide: false }).unref();
   onQuit();
 }
 
-module.exports = { check, install, cmp };
+const LOG = path.join(os.tmpdir(), 'pracenje-azuriranje.log');
+const zapis = m => { try { fs.appendFileSync(LOG, `${new Date().toISOString()} ${m}\n`); } catch { } };
+const pauza = ms => new Promise(r => setTimeout(r, ms));
+const ziv = pid => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+
+async function zamijeni([installDir, pid, staroExe], { app, dialog }) {
+  const src = path.dirname(process.execPath), exe = path.basename(process.execPath);
+  try {
+    if (!installDir || !fs.existsSync(installDir)) throw new Error('Folder aplikacije nije pronađen.');
+    zapis(`zamjena ${src} -> ${installDir}`);
+    for (let i = 0; i < 240 && ziv(Number(pid)); i++) await pauza(500);
+    await pauza(1500);
+    let greska = null;
+    for (let i = 0; i < 30; i++) {
+      try { fs.cpSync(src, installDir, { recursive: true, force: true }); greska = null; break; }
+      catch (e) { greska = e; zapis(`kopiranje, pokušaj ${i + 1}: ${e.message}`); await pauza(1000); }
+    }
+    if (greska) throw greska;
+    const nova = path.join(installDir, exe);
+    if (staroExe && path.resolve(staroExe).toLowerCase() !== path.resolve(nova).toLowerCase()) { try { fs.unlinkSync(staroExe); } catch { } }
+    zapis('kopirano, pokrecem ' + nova);
+    spawn(nova, [], { detached: true, stdio: 'ignore', cwd: installDir }).unref();
+  } catch (e) {
+    zapis('GRESKA ' + (e.stack || e.message));
+    await app.whenReady();
+    dialog.showErrorBox('Ažuriranje nije uspjelo', `${e.message}\n\nNovu verziju preuzmite ručno sa stranice Releases. Detalji su u fajlu ${LOG}.`);
+  }
+  app.exit(0);
+}
+
+// brise ostatke prethodnih azuriranja iz Temp foldera
+function pocisti() {
+  try { for (const d of fs.readdirSync(os.tmpdir())) if (d.startsWith('tm-update-')) fs.rmSync(path.join(os.tmpdir(), d), { recursive: true, force: true }); } catch { }
+}
+
+module.exports = { check, install, cmp, zamijeni, pocisti };
