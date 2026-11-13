@@ -249,16 +249,16 @@ async function readAppSheet(files) {
       cilj[k] = `${cilj[k]}${['detaljiPresuda', 'olaksavajuce', 'otezavajuce', 'komentar'].includes(k) ? '\n' : ' / '}${v}`; } };
   for (const c of [...recs.vaw_predmeti]) {
     const f = c.fields, key = `${f.sud}|${f.Title}`, prva = vawIdx.get(key);
-    const odn = Schema.fallbackChoices('vaw_predmeti', 'odnos').find(x => x.toLowerCase() === String(f.odnos || '').trim().toLowerCase());
-    const z = { odnos: odn || f.odnos || null, prijavljivala: !!f.prijavljivala, pridruzila: !!f.pridruzila };
+    const zs = razdvojiZrtve(f.odnos).map(x => ({ ...x, prijavljivala: !!f.prijavljivala, pridruzila: !!f.pridruzila }));
+    const z = zs[0];
     const o = { oznaka: null, ...Object.fromEntries(Schema.OPT_POLJA.map(k => [k, f[k] ?? null])) };
     o.osudjivan = !!o.osudjivan; o.istovrsna = !!o.istovrsna;
     for (const k of ['odnos', 'prijavljivala', 'pridruzila', ...Schema.OPT_POLJA]) delete f[k];
-    if (!prva) { vawIdx.set(key, c); f.zrtve = [z]; f.optuzeni = [o]; continue; }
+    if (!prva) { vawIdx.set(key, c); f.zrtve = zs; f.optuzeni = [o]; continue; }
     const pf = prva.fields;
-    const ista = pf.zrtve.some(x => String(x.odnos || '').trim().toLowerCase() === String(z.odnos || '').trim().toLowerCase());
+    const ista = zs.every(n => pf.zrtve.some(x => String(x.odnos || '').trim().toLowerCase() === String(n.odnos || '').trim().toLowerCase()));
     if (ista) { pf.optuzeni.push(o); report.merged = report.merged || []; report.merged.push(`${f.Title} (${f.sud}): dva reda spojena u jedan predmet sa više optuženih`); }
-    else { pf.zrtve.push(z); spoji(pf.optuzeni[0], o, Schema.OPT_POLJA); report.merged = report.merged || []; report.merged.push(`${f.Title} (${f.sud}): dva reda spojena u jedan predmet sa više žrtava`); }
+    else { pf.zrtve.push(...zs); spoji(pf.optuzeni[0], o, Schema.OPT_POLJA); report.merged = report.merged || []; report.merged.push(`${f.Title} (${f.sud}): dva reda spojena u jedan predmet sa više žrtava`); }
     for (const [k, v] of Object.entries(f)) if (Array.isArray(v) && v.length) { const seen = new Set((pf[k] || []).map(x => JSON.stringify(x))); pf[k] = [...(pf[k] || []), ...v.filter(x => !seen.has(JSON.stringify(x)))]; }
     spoji(pf, f, Object.keys(f).filter(k => !['Title', 'sud'].includes(k) && !Array.isArray(f[k])));
     recs.vaw_predmeti.splice(recs.vaw_predmeti.indexOf(c), 1);
@@ -288,6 +288,23 @@ async function readAppSheet(files) {
   }
   report.counts = Object.fromEntries(Object.entries(recs).map(([k, v]) => [k, v.length]));
   return { recs, choices, report };
+}
+
+const SINONIMI = { 'emotivna veza': 'Emotivna partnerka', 'partnerka': 'Emotivna partnerka', 'partnerka u emotivnoj vezi': 'Emotivna partnerka', 'partnerka u intimnoj vezi': 'Emotivna partnerka',
+  'bivša emotivna veza': 'Bivša emotivna partnerka', 'bivša partnerka': 'Bivša emotivna partnerka', 'bivša partnerka u intimnoj vezi': 'Bivša emotivna partnerka',
+  'ne poznaju se': 'Nepoznati', 'nisu se poznavali': 'Nepoznati', 'bez poznanstva': 'Nepoznati' };
+// "supruga (1967.) i ćerka (1990.)" -> dvije zrtve; odnos sa liste kad se prepozna, ostatak ide u opis
+function razdvojiZrtve(tekst) {
+  const lista = Schema.fallbackChoices('vaw_predmeti', 'odnos');
+  const djelovi = String(tekst || '').split(/\s*,\s*|\s+i\s+/).map(x => x.trim()).filter(Boolean);
+  if (!djelovi.length) return [{ odnos: null, opisOdnosa: null }];
+  return djelovi.map(d => {
+    const cist = d.replace(/\([^)]*\)/g, ' ').replace(/^(maloljetn[aeiou]|njen[aeiou]?|njegov[aeiou]?)\s+/i, '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const sa = lista.find(x => x.toLowerCase() === (SINONIMI[cist] || cist).toLowerCase());
+    const opis = djelovi.length > 1 || (sa && sa.toLowerCase() !== d.toLowerCase()) ? d : null;
+    return sa ? { odnos: sa, opisOdnosa: (opis || (SINONIMI[cist] ? d : null)) && (opis || d).toLowerCase() !== sa.toLowerCase() ? (opis || d) : null }
+      : { odnos: d.charAt(0).toUpperCase() + d.slice(1), opisOdnosa: null };
+  });
 }
 
 module.exports = { readAppSheet };

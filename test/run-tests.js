@@ -432,7 +432,7 @@ if (fs.existsSync(AS[0])) test('AppSheet uvoz: brojevi se poklapaju sa izvješta
   const bar = recs.svi_predmeti.filter(r => r.fields.sud === 'Osnovni sud Bar').length; assert.strictEqual(bar, 31);
   assert.strictEqual(recs.vaw_predmeti.length, 154, 'K 260/21: ista zrtva, dva optuzena = jedan predmet');
   assert.strictEqual(recs.vaw_predmeti.reduce((a, c) => a + c.fields.optuzeni.length, 0), 155, 'izvještaj broji 155 izrečenih sankcija');
-  assert.strictEqual(recs.vaw_predmeti.reduce((a, c) => a + c.fields.zrtve.length, 0), 154);
+  assert.strictEqual(recs.vaw_predmeti.reduce((a, c) => a + c.fields.zrtve.length, 0), 162, 'redovi sa više žrtava u jednom polju su podijeljeni');
   const pack = pfx => { const o = {}; for (const [k, v] of Object.entries(recs)) if (k.startsWith(pfx)) o[S.baseKey(k)] = v.map(r => ({ _id: r.id, ...r.fields })); return o; };
   const vaw = ST.compute('vaw', pack('vaw_'), null, 'vaw');
   const san = vaw.find(b => b.title === 'Izrečene sankcije po vrsti');

@@ -50,22 +50,48 @@ const zapis = m => { try { fs.appendFileSync(LOG, `${new Date().toISOString()} $
 const pauza = ms => new Promise(r => setTimeout(r, ms));
 const ziv = pid => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
 
+// procesi koji rade iz starog foldera (glavni prozor, GPU i ostali pomocni procesi imaju isti exe)
+function procesiIz(folder) {
+  return new Promise(ok => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+    `@(Get-Process | Where-Object { $_.Path -and $_.Path.StartsWith('${folder.replace(/'/g, "''")}\\', [StringComparison]::OrdinalIgnoreCase) }).Count`],
+  { windowsHide: true, timeout: 20000 }, (e, out) => ok(e ? -1 : Number(String(out).trim()) || 0)));
+}
+const isti = (a, b) => { try { const x = fs.statSync(a), y = fs.statSync(b); return x.size === y.size && fs.readFileSync(a).equals(fs.readFileSync(b)); } catch { return false; } };
+// kopira samo ono sto se razlikuje; zakljucan fajl se preimenuje (.staro) pa se upisuje novi
+function kopiraj(src, dst, stat) {
+  fs.mkdirSync(dst, { recursive: true });
+  for (const e of fs.readdirSync(src, { withFileTypes: true })) {
+    const s = path.join(src, e.name), d = path.join(dst, e.name);
+    if (e.isDirectory()) { kopiraj(s, d, stat); continue; }
+    if (fs.existsSync(d) && isti(s, d)) { stat.isti++; continue; }
+    try { fs.copyFileSync(s, d); }
+    catch (err) {
+      if (!fs.existsSync(d)) throw err;
+      zapis(`zakljucan ${d}: ${err.code}, preimenujem`);
+      fs.renameSync(d, `${d}.staro-${Date.now()}`); fs.copyFileSync(s, d);
+    }
+    stat.novi++;
+  }
+}
+
 async function zamijeni([installDir, pid, staroExe], { app, dialog }) {
   const src = path.dirname(process.execPath), exe = path.basename(process.execPath);
   try {
     if (!installDir || !fs.existsSync(installDir)) throw new Error('Folder aplikacije nije pronađen.');
     zapis(`zamjena ${src} -> ${installDir}`);
     for (let i = 0; i < 240 && ziv(Number(pid)); i++) await pauza(500);
-    await pauza(1500);
+    for (let i = 0; i < 60; i++) { const n = await procesiIz(installDir); if (n <= 0) break; if (i % 10 === 0) zapis(`jos ${n} procesa iz starog foldera`); await pauza(1000); }
+    await pauza(1000);
     let greska = null;
-    for (let i = 0; i < 30; i++) {
-      try { fs.cpSync(src, installDir, { recursive: true, force: true }); greska = null; break; }
-      catch (e) { greska = e; zapis(`kopiranje, pokušaj ${i + 1}: ${e.message}`); await pauza(1000); }
+    for (let i = 0; i < 10; i++) {
+      const stat = { isti: 0, novi: 0 };
+      try { kopiraj(src, installDir, stat); greska = null; zapis(`kopirano: ${stat.novi} novih, ${stat.isti} istih`); break; }
+      catch (e) { greska = e; zapis(`kopiranje, pokušaj ${i + 1}: ${e.message}`); await pauza(2000); }
     }
     if (greska) throw greska;
     const nova = path.join(installDir, exe);
     if (staroExe && path.resolve(staroExe).toLowerCase() !== path.resolve(nova).toLowerCase()) { try { fs.unlinkSync(staroExe); } catch { } }
-    zapis('kopirano, pokrecem ' + nova);
+    zapis('pokrecem ' + nova);
     spawn(nova, [], { detached: true, stdio: 'ignore', cwd: installDir }).unref();
   } catch (e) {
     zapis('GRESKA ' + (e.stack || e.message));
@@ -75,9 +101,12 @@ async function zamijeni([installDir, pid, staroExe], { app, dialog }) {
   app.exit(0);
 }
 
-// brise ostatke prethodnih azuriranja iz Temp foldera
-function pocisti() {
+// brise ostatke prethodnih azuriranja (Temp folder i preimenovane .staro fajlove u folderu aplikacije)
+function pocisti(installDir) {
   try { for (const d of fs.readdirSync(os.tmpdir())) if (d.startsWith('tm-update-')) fs.rmSync(path.join(os.tmpdir(), d), { recursive: true, force: true }); } catch { }
+  const brisi = dir => { try { for (const e of fs.readdirSync(dir, { withFileTypes: true })) { const p = path.join(dir, e.name);
+    if (e.isDirectory()) brisi(p); else if (/\.staro-\d+$/.test(e.name)) try { fs.unlinkSync(p); } catch { } } } catch { } };
+  if (installDir) brisi(installDir);
 }
 
 module.exports = { check, install, cmp, zamijeni, pocisti };
