@@ -241,7 +241,10 @@ function createWindow() {
   });
   win.once('ready-to-show', () => win.show());
   win.loadFile(path.join(__dirname, '../renderer/index.html'));
-  win.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' }; });
+  // aplikacija ne otvara linkove, druge stranice ni nove prozore, i ne trazi dozvole (kamera, mikrofon...)
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-navigate', e => e.preventDefault());
+  win.webContents.session.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
   win.on('close', e => {
     if (win._allowClose) return;
     e.preventDefault();
