@@ -13,7 +13,7 @@ jobs:
           node-version: 22
           cache: npm
       - name: Alati za pakovanje
-        run: sudo apt-get update && sudo apt-get install -y xvfb zip unzip
+        run: sudo apt-get update && sudo apt-get install -y xvfb zip unzip nsis
       - name: Instalacija modula
         run: npm ci
       - name: Verzija iz package.json
@@ -30,4 +30,6 @@ jobs:
         with:
           tag_name: v${{ steps.v.outputs.version }}
           name: ${{ steps.v.outputs.version }}
-          files: dist/Pracenje-sudjenja-*.zip
+          files: |
+            dist/Pracenje-sudjenja-*.zip
+            dist/Pracenje-sudjenja-Setup-*.exe

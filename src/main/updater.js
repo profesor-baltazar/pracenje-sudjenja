@@ -126,4 +126,14 @@ function pocisti(installDir) {
   if (installDir) brisi(installDir);
 }
 
-module.exports = { check, install, cmp, zamijeni, pocisti };
+// instalirana verzija (Setup.exe): u Windows podesavanjima → Aplikacije prikazi tacan broj verzije i poslije azuriranja
+function registar(ver) {
+  if (process.platform !== 'win32') return;
+  const k = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\PracenjeSudjenja';
+  execFile('reg', ['query', k, '/v', 'DisplayVersion'], { windowsHide: true }, (e, out) => {
+    if (e || String(out).includes(ver)) return;
+    execFile('reg', ['add', k, '/v', 'DisplayVersion', '/d', ver, '/f'], { windowsHide: true }, () => { });
+  });
+}
+
+module.exports = { check, install, cmp, zamijeni, pocisti, registar };

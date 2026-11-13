@@ -41,3 +41,7 @@ with zipfile.ZipFile(sys.argv[1], 'w', zipfile.ZIP_DEFLATED) as z:
             full = os.path.join(root, f); z.write(full, os.path.relpath(full, 'dist/portable'))
 PY
 ls -la "dist/Pracenje-sudjenja-$VER.zip"
+if command -v makensis >/dev/null; then
+  (cd build && LC_ALL=C.UTF-8 LANG=C.UTF-8 makensis -V2 -DVERZIJA="$VER" installer.nsi)
+  ls -la "dist/Pracenje-sudjenja-Setup-$VER.exe"
+fi

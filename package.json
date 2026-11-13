@@ -1,7 +1,7 @@
 {
   "name": "pracenje-sudjenja",
   "productName": "Praćenje suđenja",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Praćenje suđenja",
   "main": "src/main/main.js",
   "scripts": {

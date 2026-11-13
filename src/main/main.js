@@ -280,6 +280,7 @@ ipcMain.handle('update:install', async () => {
 app.whenReady().then(async () => {
   if (ZAMJENA >= 0) return;
   Updater.pocisti(app.isPackaged ? path.dirname(process.execPath) : null);
+  if (app.isPackaged) Updater.registar(app.getVersion());
   Menu.setApplicationMenu(null);
   store = await Store.open(path.join(app.getPath('userData'), 'podaci.sqlite'));
   initServices();
