@@ -43,9 +43,9 @@ const test = (ime, fn) => testovi.push([ime, fn]);
     await assertFails(setDoc(doc(stranac(), 'predmeti/novi'), { Title: 'X', _owner: 'niko@x.me' }));
   });
   test('neodobren ne može postati administrator kad administrator postoji', async () => {
-    const b = writeBatch(stranac());
-    b.set(doc(stranac(), 'users/niko@x.me'), { name: 'Niko', role: 'admin' });
-    b.set(doc(stranac(), 'meta/bootstrap'), { by: 'niko@x.me' });
+    const db = stranac(), b = writeBatch(db);
+    b.set(doc(db, 'users/niko@x.me'), { name: 'Niko', role: 'admin' });
+    b.set(doc(db, 'meta/bootstrap'), { by: 'niko@x.me' });
     await assertFails(b.commit());
   });
   test('prvi korisnik praznog projekta postaje administrator', async () => {
