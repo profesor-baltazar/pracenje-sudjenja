@@ -12,7 +12,7 @@ const Schema = require('../shared/schema.js');
 let win, store, auth, fsdb, sync, config, online = true, timer;
 // pokrenuto iz preuzete nove verzije: samo zamijeni fajlove u folderu aplikacije i pokreni je
 const ZAMJENA = process.argv.indexOf('--zamijeni');
-if (ZAMJENA >= 0) require('./updater').zamijeni(process.argv.slice(ZAMJENA + 1), { app, dialog });
+if (ZAMJENA >= 0) require('./updater').zamijeni(process.argv.slice(ZAMJENA + 1), { app, dialog, BrowserWindow });
 const SYNC_EVERY_MS = 5 * 60 * 1000;
 
 // podaci iz starog foldera (prije promjene imena)
@@ -265,7 +265,7 @@ ipcMain.handle('update:install', async () => {
   if (!updateInfo.available) throw new Error('Nema novije verzije.');
   if (!app.isPackaged) throw new Error('Ažuriranje radi samo u instaliranoj (portable) verziji.');
   if (store) store.flushNow();
-  await Updater.install(updateInfo, { appExe: process.execPath, onProgress: p => send('update:progress', p), onQuit: () => setTimeout(() => app.quit(), 300) });
+  await Updater.install(updateInfo, { appExe: process.execPath, onProgress: p => send('update:progress', p), onQuit: () => setTimeout(() => { try { if (store) store.flushNow(); } catch { } app.exit(0); }, 300) });
   return true;
 });
 app.whenReady().then(async () => {

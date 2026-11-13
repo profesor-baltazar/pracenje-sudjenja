@@ -56,7 +56,11 @@ function procesiIz(folder) {
     `@(Get-Process | Where-Object { $_.Path -and $_.Path.StartsWith('${folder.replace(/'/g, "''")}\\', [StringComparison]::OrdinalIgnoreCase) }).Count`],
   { windowsHide: true, timeout: 20000 }, (e, out) => ok(e ? -1 : Number(String(out).trim()) || 0)));
 }
-const isti = (a, b) => { try { const x = fs.statSync(a), y = fs.statSync(b); return x.size === y.size && fs.readFileSync(a).equals(fs.readFileSync(b)); } catch { return false; } };
+// veliki fajlovi (Chromium) su isti u svim verzijama: dovoljno je uporediti velicinu, pocetak i kraj
+const dio = (f, pos, n) => { const fd = fs.openSync(f, 'r'); try { const b = Buffer.alloc(n); fs.readSync(fd, b, 0, n, pos); return b; } finally { fs.closeSync(fd); } };
+const isti = (a, b) => { try { const x = fs.statSync(a), y = fs.statSync(b); if (x.size !== y.size) return false;
+  if (x.size <= 2 * 1024 * 1024) return fs.readFileSync(a).equals(fs.readFileSync(b));
+  const n = 65536; return dio(a, 0, n).equals(dio(b, 0, n)) && dio(a, x.size - n, n).equals(dio(b, y.size - n, n)); } catch { return false; } };
 // kopira samo ono sto se razlikuje; zakljucan fajl se preimenuje (.staro) pa se upisuje novi
 function kopiraj(src, dst, stat) {
   fs.mkdirSync(dst, { recursive: true });
@@ -74,13 +78,21 @@ function kopiraj(src, dst, stat) {
   }
 }
 
-async function zamijeni([installDir, pid, staroExe], { app, dialog }) {
+async function zamijeni([installDir, pid, staroExe], { app, dialog, BrowserWindow }) {
   const src = path.dirname(process.execPath), exe = path.basename(process.execPath);
+  let prozor = null;
   try {
+    await app.whenReady();
+    if (BrowserWindow) {
+      prozor = new BrowserWindow({ width: 440, height: 150, frame: false, resizable: false, alwaysOnTop: true, center: true, title: 'Ažuriranje' });
+      const ver = (() => { try { return require(path.join(src, 'resources', 'app', 'package.json')).version; } catch { return ''; } })();
+      prozor.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(`<body style="margin:0;font:15px system-ui;display:flex;align-items:center;justify-content:center;height:100vh;background:#1b2a47;color:#fff;text-align:center">
+        <div><b>Ažuriranje na verziju ${ver}…</b><div style="margin-top:8px;opacity:.8;font-size:13px">Aplikacija će se sama otvoriti. Ne pokrećite je u međuvremenu.</div></div></body>`));
+    }
     if (!installDir || !fs.existsSync(installDir)) throw new Error('Folder aplikacije nije pronađen.');
     zapis(`zamjena ${src} -> ${installDir}`);
     for (let i = 0; i < 240 && ziv(Number(pid)); i++) await pauza(500);
-    for (let i = 0; i < 60; i++) { const n = await procesiIz(installDir); if (n <= 0) break; if (i % 10 === 0) zapis(`jos ${n} procesa iz starog foldera`); await pauza(1000); }
+    for (let i = 0; i < 20; i++) { const n = await procesiIz(installDir); if (n <= 0) break; if (i % 5 === 0) zapis(`jos ${n} procesa iz starog foldera`); await pauza(1000); }
     await pauza(1000);
     let greska = null;
     for (let i = 0; i < 10; i++) {
@@ -95,6 +107,7 @@ async function zamijeni([installDir, pid, staroExe], { app, dialog }) {
     spawn(nova, [], { detached: true, stdio: 'ignore', cwd: installDir }).unref();
   } catch (e) {
     zapis('GRESKA ' + (e.stack || e.message));
+    if (prozor) prozor.destroy();
     await app.whenReady();
     dialog.showErrorBox('Ažuriranje nije uspjelo', `${e.message}\n\nNovu verziju preuzmite ručno sa stranice Releases. Detalji su u fajlu ${LOG}.`);
   }
