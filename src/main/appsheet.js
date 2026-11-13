@@ -241,11 +241,32 @@ async function readAppSheet(files) {
   require('./importer.js').normalizeTitles(recs, ['svir_predmeti'], 'K', w => report.warnings.push(w));
   require('./importer.js').parseOffences(recs, ['svi_predmeti', 'svir_predmeti', 'vaw_predmeti']);
   require('./importer.js').numberDetainees(recs, ['svi_pritvori', 'svi_jemstva', 'svi_nadzor']);
-  report.merged = [...recs.svi_predmeti.filter(c => c._inline).map(c => c._inline), ...mr.merged];
+  // nasilje nad zenama: zrtve i optuzeni idu u liste u predmetu. Isti sud i broj:
+  // druga zrtva -> ista presuda, dodaje se zrtva; ista zrtva -> drugi optuzeni (npr. saizvrsilastvo)
+  const vawIdx = new Map(), prazno = v => v === null || v === undefined || v === '' || v === false;
+  const spoji = (cilj, izvor, polja) => { for (const k of polja) { const v = izvor[k]; if (prazno(v)) continue;
+    if (prazno(cilj[k])) cilj[k] = v; else if (typeof v === 'string' && typeof cilj[k] === 'string' && cilj[k] !== v)
+      cilj[k] = `${cilj[k]}${['detaljiPresuda', 'olaksavajuce', 'otezavajuce', 'komentar'].includes(k) ? '\n' : ' / '}${v}`; } };
+  for (const c of [...recs.vaw_predmeti]) {
+    const f = c.fields, key = `${f.sud}|${f.Title}`, prva = vawIdx.get(key);
+    const z = { odnos: f.odnos || null, prijavljivala: !!f.prijavljivala, pridruzila: !!f.pridruzila };
+    const o = { oznaka: null, ...Object.fromEntries(Schema.OPT_POLJA.map(k => [k, f[k] ?? null])) };
+    o.osudjivan = !!o.osudjivan; o.istovrsna = !!o.istovrsna;
+    for (const k of ['odnos', 'prijavljivala', 'pridruzila', ...Schema.OPT_POLJA]) delete f[k];
+    if (!prva) { vawIdx.set(key, c); f.zrtve = [z]; f.optuzeni = [o]; continue; }
+    const pf = prva.fields;
+    const ista = pf.zrtve.some(x => String(x.odnos || '').trim().toLowerCase() === String(z.odnos || '').trim().toLowerCase());
+    if (ista) { pf.optuzeni.push(o); report.merged = report.merged || []; report.merged.push(`${f.Title} (${f.sud}): dva reda spojena u jedan predmet sa više optuženih`); }
+    else { pf.zrtve.push(z); spoji(pf.optuzeni[0], o, Schema.OPT_POLJA); report.merged = report.merged || []; report.merged.push(`${f.Title} (${f.sud}): dva reda spojena u jedan predmet sa više žrtava`); }
+    for (const [k, v] of Object.entries(f)) if (Array.isArray(v) && v.length) { const seen = new Set((pf[k] || []).map(x => JSON.stringify(x))); pf[k] = [...(pf[k] || []), ...v.filter(x => !seen.has(JSON.stringify(x)))]; }
+    spoji(pf, f, Object.keys(f).filter(k => !['Title', 'sud'].includes(k) && !Array.isArray(f[k])));
+    recs.vaw_predmeti.splice(recs.vaw_predmeti.indexOf(c), 1);
+  }
+  report.merged = [...recs.svi_predmeti.filter(c => c._inline).map(c => c._inline), ...mr.merged, ...(report.merged || [])];
   for (const c of recs.svi_predmeti) delete c._inline;
   for (const t of mr.unmatched) report.warnings.push(`Ponovljeni postupak ${t}: izvorni predmet nije pronađen – uvezen kao poseban predmet`);
   for (const [list, rs] of Object.entries(recs)) {
-    for (const r of rs) for (const f of Schema.fieldsOf(list)) if (!(f.name in r.fields)) r.fields[f.name] = f.type === 'bool' ? false : f.type === 'multichoice' ? [] : null;
+    for (const r of rs) for (const f of Schema.fieldsOf(list)) if (!f.virtual && !(f.name in r.fields)) r.fields[f.name] = f.type === 'bool' ? false : f.type === 'multichoice' ? [] : null;
   }
   const choices = {};
   for (const l of Schema.LISTS.filter(x => recs[x.key])) for (const f of Schema.fieldsOf(l.key)) {

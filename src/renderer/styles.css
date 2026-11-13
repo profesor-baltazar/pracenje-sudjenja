@@ -179,6 +179,11 @@ table.grid { width: 100%; border-collapse: collapse; }
 .ozfix { font-weight: 600; padding: 0 10px; height: 36px; display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: var(--radius); background: var(--accent-soft); color: var(--accent); }
 
 .djela { display: flex; flex-direction: column; gap: 10px; }
+.zrtva-q { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-top: 8px; border-top: 1px solid var(--line); }
+.grupa-polja { display: flex; flex-wrap: wrap; column-gap: 16px; row-gap: 8px; }
+.grupa-polja > * { flex: 1 1 100%; }
+.grupa-polje.pola { flex: 0 1 calc(50% - 8px); }
+.grupa-polje.trecina { flex: 1 1 0; min-width: 120px; }
 .djelo { border: 1px solid var(--line); border-left: 3px solid var(--accent-2); border-radius: var(--radius); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; background: var(--panel); }
 .djelo-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .djelo .mini { display: flex; flex-direction: column; font-size: 12px; color: var(--muted); gap: 2px; }

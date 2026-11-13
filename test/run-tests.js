@@ -400,6 +400,28 @@ test('tabele za izvještaj – filtriranje po periodu (sintetički podaci)', () 
   assert.strictEqual(all[0].rows.length, 19, '16 sudova + 3 zbirna reda');
 });
 
+test('Nasilje nad ženama: više žrtava u jednom predmetu', () => {
+  const data = { predmeti: [{ _id: 'a', sud: 'Osnovni sud Nikšić', Title: 'K 1/25', glavnaSankcija: 'Kazna zatvora', olaksavajucaNepridruzivanje: true },
+    { _id: 'b', sud: 'Osnovni sud Nikšić', Title: 'K 2/25', odnos: 'supruga', prijavljivala: true, pridruzila: false }],
+  };
+  data.predmeti[0].zrtve = [{ odnos: 'snaha', prijavljivala: true, pridruzila: true }, { odnos: 'sestra', prijavljivala: false, pridruzila: true }];
+  const rt = ST.report('vaw', data, {});
+  assert.deepStrictEqual(rt[0].rows.slice(-1)[0], ['SVI SUDOVI', 2], 'dva predmeta');
+  assert.deepStrictEqual(rt[1].rows.slice(-1)[0], ['SVI SUDOVI', 3, 2, '66,67%', 1, '33,33%'], 'tri oštećene (stari unos = jedna žrtva)');
+  assert.deepStrictEqual(rt[2].rows.slice(-1)[0], ['SVI SUDOVI', 3, 2, '66,67%', 1, '33,33%']);
+  assert.deepStrictEqual(rt[5].rows.slice(-1)[0], ['SVI SUDOVI', 2, 1, '50%'], 'olakšavajuća okolnost ostaje po predmetu');
+  const rel = rt.find(t => t.title === 'Odnos oštećenih i okrivljenih'); assert.strictEqual(rel.rows.length, 3);
+  const tp = ST.compute('vaw', data, null, 'vaw'); assert.strictEqual(tp.find(t => t.title === 'Oštećene').rows[0][1], 3);
+  data.predmeti.push({ _id: 'c', sud: 'Osnovni sud Bar', Title: 'K 3/25', zrtve: [{ odnos: 'majka' }],
+    optuzeni: [{ oznaka: '1.', osudjivan: true, glavnaSankcija: 'Kazna zatvora', zatvorMjeseci: 4 }, { oznaka: '2.', osudjivan: false, glavnaSankcija: 'Uslovna osuda' }] });
+  const rt2 = ST.report('vaw', data, {});
+  assert.deepStrictEqual(rt2[6].rows.slice(-1)[0].slice(0, 4), ['SVI SUDOVI', 4, 1, '25%'], 'osuđivanost po optuženom: 4 optužena');
+  assert.deepStrictEqual(rt2[9].rows.find(r => r[0] === 'Kazna zatvora'), ['Kazna zatvora', 2, '66,67%'], 'sankcije po optuženom');
+  assert.strictEqual(ST.compute('vaw', data, null, 'vaw').find(t => t.title === 'Optuženi').rows[0][1], 4);
+  assert(!S.LIST_BY_KEY.vaw_zrtve && S.fieldsOf('vaw_predmeti').some(f => f.type === 'zrtve'));
+  assert(S.fieldsOf('vaw_predmeti').filter(f => ['odnos', 'prijavljivala', 'pridruzila'].includes(f.name)).every(f => f.hidden));
+});
+
 const AS_DIR = process.env.TM_APPSHEET_DIR || path.join(__dirname, 'podaci', 'appsheet');
 const AS = [path.join(AS_DIR, 'form_uvid.xlsx'), path.join(AS_DIR, 'form_rocista.xlsx')];
 if (fs.existsSync(AS[0])) test('AppSheet uvoz: brojevi se poklapaju sa izvještajima', async () => {
@@ -408,7 +430,9 @@ if (fs.existsSync(AS[0])) test('AppSheet uvoz: brojevi se poklapaju sa izvješta
   assert.strictEqual(recs.svi_predmeti.length, 466, 'Svi sudovi, Tabela 1: 466 predmeta');
   assert.strictEqual((recs.svi_faze || []).length, 12, 'ponovljena suđenja u AppSheet-u postala faze predmeta');
   const bar = recs.svi_predmeti.filter(r => r.fields.sud === 'Osnovni sud Bar').length; assert.strictEqual(bar, 31);
-  assert.strictEqual(recs.vaw_predmeti.length, 155);
+  assert.strictEqual(recs.vaw_predmeti.length, 154, 'K 260/21: ista zrtva, dva optuzena = jedan predmet');
+  assert.strictEqual(recs.vaw_predmeti.reduce((a, c) => a + c.fields.optuzeni.length, 0), 155, 'izvještaj broji 155 izrečenih sankcija');
+  assert.strictEqual(recs.vaw_predmeti.reduce((a, c) => a + c.fields.zrtve.length, 0), 154);
   const pack = pfx => { const o = {}; for (const [k, v] of Object.entries(recs)) if (k.startsWith(pfx)) o[S.baseKey(k)] = v.map(r => ({ _id: r.id, ...r.fields })); return o; };
   const vaw = ST.compute('vaw', pack('vaw_'), null, 'vaw');
   const san = vaw.find(b => b.title === 'Izrečene sankcije po vrsti');
@@ -417,7 +441,7 @@ if (fs.existsSync(AS[0])) test('AppSheet uvoz: brojevi se poklapaju sa izvješta
     const comb = ST.compute('pritvor', d, null, 'svi').find(b => b.title.startsWith('Struktura i učestalost određivanja pritvora po više'));
     assert.strictEqual(comb.rows[comb.rows.length - 1][1], 54, 'Svi sudovi, Tabela 30: kombinacije osnova');
     assert(ST.compute('nadzor', d, null, 'svi').some(b => b.title === 'Jemstvo'), 'Svi sudovi: tema mjere nadzora i jemstvo'); }
-  const vp = recs.vaw_predmeti.map(x => x.fields);
+  const vp = recs.vaw_predmeti.flatMap(x => x.fields.optuzeni);
   assert(vp.some(f => f.zatvorGodina === 1 && f.zatvorMjeseci === 6 && f.zatvorDana === 0), '"1 god. i 6 mjeseci" → 1 / 6 / 0');
   assert(vp.some(f => f.zatvorMjeseci === 4 && f.zatvorDana === 0) && !vp.some(f => f.zatvorDana > 31), '"120 dana" → 4 mjeseca');
   assert.deepStrictEqual(san.rows.find(r => /prostorijama/.test(r[0])).slice(1), [13, '8.39%']);

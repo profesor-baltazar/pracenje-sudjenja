@@ -153,6 +153,13 @@
       if (p && !p.stav) return { warn: 'Pranje novca: po izmjenama Zakona o SDT nadležnost postoji samo za čl. 268 st. 3 i 4 – upišite stav.' }; }
     return {};
   }
+  // zrtve predmeta; stari unos (jedna zrtva u poljima predmeta) vraca se kao jedna zrtva
+  const zrtveOf = c => Array.isArray(c.zrtve) && c.zrtve.length ? c.zrtve
+    : (c.odnos || c.prijavljivala || c.pridruzila ? [{ odnos: c.odnos || null, prijavljivala: c.prijavljivala === true, pridruzila: c.pridruzila === true }] : []);
+  const OPT_POLJA = ['osudjivan', 'istovrsna', 'detaljiPresuda', 'glavnaSankcija', 'zatvorGodina', 'zatvorMjeseci', 'zatvorDana', 'zatvorKategorija', 'mjeraBezbjednosti', 'sankcija'];
+  // optuzeni predmeta; stari unos (jedan optuzeni u poljima predmeta) vraca se kao jedan
+  const optuzeniOf = c => Array.isArray(c.optuzeni) && c.optuzeni.length ? c.optuzeni
+    : (OPT_POLJA.some(k => c[k] !== null && c[k] !== undefined && c[k] !== '' && c[k] !== false) ? [{ oznaka: null, ...Object.fromEntries(OPT_POLJA.map(k => [k, c[k] ?? null])) }] : []);
   const djelaField = { name: 'djela', label: 'Krivična djela', type: 'djela', wide: true,
     hint: 'Upišite član KZ (npr. 143 ili 168a) – naziv se popunjava sam. Stav nije obavezan. Dodatke označite po potrebi.',
     check: (r, ctx) => { const bad = (r.djela || []).filter(d => d.clan && !kzClan(d.clan)).map(d => d.clan);
@@ -597,21 +604,26 @@
     djelaField,
     { name: 'krivicnoDjelo', label: 'Krivično djelo', type: 'text', hidden: true },
     { name: 'clanKZ', label: 'Član KZCG', type: 'text', hidden: true },
-    { section: 'Podaci o žrtvi' },
-    { name: 'odnos', label: 'Odnos žrtve sa optuženim', type: 'text', hint: 'npr. supruga, bivša vanbračna supruga, majka' },
-    { name: 'prijavljivala', label: 'Žrtva je prethodno prijavljivala nasilje', type: 'bool' },
-    { name: 'pridruzila', label: 'Žrtva se pridružila krivičnom gonjenju', type: 'bool' },
-    { section: 'Podaci o optuženom' },
-    { name: 'osudjivan', label: 'Optuženi je prethodno osuđivan', type: 'bool' },
-    { name: 'istovrsna', label: 'Prethodno osuđivan za istovjetna ili istovrsna krivična djela', type: 'bool', show: r => r.osudjivan === true },
-    { name: 'detaljiPresuda', label: 'Detalji prethodnih presuda (kada, vrsta i visina sankcije)', type: 'longtext', show: r => r.osudjivan === true },
+    { section: 'Podaci o žrtvama' },
+    { name: 'zrtve', label: 'Žrtve', type: 'zrtve', wide: true },
+    // stara polja (jedna zrtva po predmetu), ostaju zbog ranijih unosa
+    { name: 'odnos', label: 'Odnos žrtve sa optuženim', type: 'text', hidden: true },
+    { name: 'prijavljivala', label: 'Žrtva je prethodno prijavljivala nasilje', type: 'bool', hidden: true },
+    { name: 'pridruzila', label: 'Žrtva se pridružila krivičnom gonjenju', type: 'bool', hidden: true },
+    { section: 'Podaci o optuženima' },
+    { name: 'optuzeni', label: 'Optuženi', type: 'optuzeni', wide: true },
     { section: 'Presuda' },
-    { name: 'glavnaSankcija', label: 'Glavna sankcija', type: 'choice' },
-    { name: 'zatvorGodina', label: 'Kazna zatvora – godine', type: 'number', max: 40, third: true, hint: '0–40', show: r => /zatvor/i.test(r.glavnaSankcija || '') },
-    { name: 'zatvorMjeseci', label: 'Kazna zatvora – mjeseci', type: 'number', max: 12, third: true, hint: '0–12', show: r => /zatvor/i.test(r.glavnaSankcija || '') },
-    { name: 'zatvorDana', label: 'Kazna zatvora – dani', type: 'number', max: 31, third: true, hint: '0–31', show: r => /zatvor/i.test(r.glavnaSankcija || '') },
-    { name: 'mjeraBezbjednosti', label: 'Mjera bezbjednosti, visina novčane kazne i sl.', type: 'text' },
-    { name: 'sankcija', label: 'Sankcija – opis', type: 'text', hint: 'Ako je oslobođen optužbi, upisati najvažnije razloge' },
+    { name: 'sankcijeOptuzenih', label: 'Izrečene sankcije', type: 'sankcije', wide: true, virtual: true },
+    // stara polja (jedan optuzeni po predmetu), ostaju zbog ranijih unosa i liste izbora
+    { name: 'osudjivan', label: 'Optuženi je prethodno osuđivan', type: 'bool', hidden: true },
+    { name: 'istovrsna', label: 'Prethodno osuđivan za istovjetna ili istovrsna krivična djela', type: 'bool', hidden: true },
+    { name: 'detaljiPresuda', label: 'Detalji prethodnih presuda', type: 'longtext', hidden: true },
+    { name: 'glavnaSankcija', label: 'Glavna sankcija', type: 'choice', hidden: true },
+    { name: 'zatvorGodina', label: 'Kazna zatvora – godine', type: 'number', hidden: true },
+    { name: 'zatvorMjeseci', label: 'Kazna zatvora – mjeseci', type: 'number', hidden: true },
+    { name: 'zatvorDana', label: 'Kazna zatvora – dani', type: 'number', hidden: true },
+    { name: 'mjeraBezbjednosti', label: 'Mjera bezbjednosti, visina novčane kazne i sl.', type: 'text', hidden: true },
+    { name: 'sankcija', label: 'Sankcija – opis', type: 'text', hidden: true },
     { name: 'olaksavajucaNepridruzivanje', label: 'Jedna od olakšavajućih okolnosti je da se oštećena nije pridružila krivičnom gonjenju', type: 'bool' },
     { name: 'olaksavajuce', label: 'Sve olakšavajuće okolnosti', type: 'longtext' },
     { name: 'otezavajuce', label: 'Otežavajuće okolnosti', type: 'longtext' },
@@ -920,7 +932,7 @@
   }
 
   const isPhased = listKey => PHASED.includes(baseKey(listKey));
-  const api = { TOK_DOGADJAJI, TOK_KRAJ, TOK_FAZE, TOK_STARA, TOK_IZVEDENA, tokFaza, tokIzStarog, tokUStaro, tokProvjera, tokPregled, tokSort, CUSTOM_TYPES, isCustomKey, isCustomField, applyCustom, customConfig, newKey, SDT_IZMJENE, SDT_GRUPE, sdtRezim, sdtDozvoljen, sdtProvjera, isOkk, ROC_MJERE, rocMjere, rocMjereZbir, ODL_UCESNICI, ODL_DOSTAVA, ODL_GRUPE, ODL_OPIS, rocRazlozi, KZ, DODACI, kzClan, tackeU, djeloText, djelaText, parseDjela, OBAVEZNA_POLJA, OZNAKE, oznakeFor, splitCaseNo, normCaseNo, dateRules, ZKP_IZMJENE_2026, noviZKP, addMonths, potvrdaRok, PHASED, isPhased, MODULES, SPACES, SPACE_BY_KEY, LISTS, LIST_BY_KEY, FORMS, FALLBACK_CHOICES, SUDOVI, listsOf, baseKey, choiceKeys, fallbackChoices,
+  const api = { zrtveOf, optuzeniOf, OPT_POLJA, TOK_DOGADJAJI, TOK_KRAJ, TOK_FAZE, TOK_STARA, TOK_IZVEDENA, tokFaza, tokIzStarog, tokUStaro, tokProvjera, tokPregled, tokSort, CUSTOM_TYPES, isCustomKey, isCustomField, applyCustom, customConfig, newKey, SDT_IZMJENE, SDT_GRUPE, sdtRezim, sdtDozvoljen, sdtProvjera, isOkk, ROC_MJERE, rocMjere, rocMjereZbir, ODL_UCESNICI, ODL_DOSTAVA, ODL_GRUPE, ODL_OPIS, rocRazlozi, KZ, DODACI, kzClan, tackeU, djeloText, djelaText, parseDjela, OBAVEZNA_POLJA, OZNAKE, oznakeFor, splitCaseNo, normCaseNo, dateRules, ZKP_IZMJENE_2026, noviZKP, addMonths, potvrdaRok, PHASED, isPhased, MODULES, SPACES, SPACE_BY_KEY, LISTS, LIST_BY_KEY, FORMS, FALLBACK_CHOICES, SUDOVI, listsOf, baseKey, choiceKeys, fallbackChoices,
     fieldsOf, isVisible, sectionVisible, validate, summarize, caseTitle, isEmpty, isDate, days, dayNum, fmtDate };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Schema = api;
 })(typeof self !== 'undefined' ? self : this);
