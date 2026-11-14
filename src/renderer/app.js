@@ -344,13 +344,15 @@ function viewCases() {
     st.space === 'okk' ? [chip('ok', 'Org. kriminal'), chip('vk', 'Visoka korupcija')] : null, chip('moji', 'Moji unosi')];
   const hasSud = mod !== 'okk';
   const cols = cust ? ['Predmet', 'Sud', 'Popunjenost', 'Posljednja izmjena'] : roc ? ['Predmet', hasSud ? 'Sud' : null, 'Krivično djelo', 'Ročišta', 'Posljednje ročište', 'Posljednja izmjena', ' ']
-    : mod === 'vaw' ? ['Predmet', 'Sud', 'Krivično djelo', 'Glavna sankcija', 'Oznake', 'Posljednja izmjena']
+    : mod === 'vaw' ? ['Predmet', 'Sud', 'Krivično djelo', 'Ranije prijavljivala', 'Nepridruživanje kao olakšavajuće', 'Posljednja izmjena']
     : ['Predmet', hasSud ? 'Sud' : 'Vrsta', 'Optužni akt', 'Oznake', 'Popunjenost', 'Posljednja izmjena'];
   const newLabel = roc ? '+ Novi praćeni predmet' : '+ Novi predmet';
   const fl = stepList('faze'), nPh = c => fl ? allChildRecs(fl.key, c.id).length : 0;
   const tags = c => [prit(c) ? h('span', { class: 'badge blue' }, 'pritvor') : null, ' ', nPh(c) ? h('span', { class: 'badge orange' }, nPh(c) === 1 ? 'ponovljeno suđenje' : `${nPh(c)} ponovljena suđenja`) : null, ' ',
-    S.isDate(c.fields.Odlaganjero_x010d_i_x0161_ta) ? h('span', { class: 'badge ok' }, 'pravosnažno') : null,
-    mod === 'vaw' && c.fields.prijavljivala ? h('span', { class: 'badge warn' }, 'ranije prijavljivala') : null];
+    S.isDate(c.fields.Odlaganjero_x010d_i_x0161_ta) ? h('span', { class: 'badge ok' }, 'pravosnažno') : null];
+  const daNe = v => h('td', {}, v ? h('span', { class: 'badge warn' }, 'Da') : h('span', { class: 'muted' }, 'Ne'));
+  const NASLOVI = { 'Ranije prijavljivala': 'Žrtva je ranije prijavljivala nasilje',
+    'Nepridruživanje kao olakšavajuće': 'Jedna od olakšavajućih okolnosti je da se oštećena nije pridružila krivičnom gonjenju' };
   const cell = (c, col) => {
     const f = c.fields, steps = col === 'Popunjenost' ? stepsFor(c).filter(s => !s.na) : null, H = rocL ? childRecs(rocL, c.id) : [];
     switch (col) {
@@ -359,7 +361,8 @@ function viewCases() {
       case 'Vrsta': return h('td', {}, f.Vrstapredmeta || h('span', { class: 'muted' }, '—'));
       case 'Optužni akt': return h('td', {}, f.Vrstaoptu_x017e_nogakta || h('span', { class: 'muted' }, '—'));
       case 'Krivično djelo': return h('td', { class: 'small' }, f.krivicnoDjelo || h('span', { class: 'muted' }, '—'));
-      case 'Glavna sankcija': return h('td', { class: 'small' }, f.glavnaSankcija || h('span', { class: 'muted' }, '—'));
+      case 'Ranije prijavljivala': return daNe(S.zrtveOf(f).some(z => z.prijavljivala === true));
+      case 'Nepridruživanje kao olakšavajuće': return daNe(f.olaksavajucaNepridruzivanje === true);
       case 'Oznake': return h('td', {}, tags(c));
       case 'Ročišta': return h('td', {}, `${H.length}`, H.length ? h('span', { class: 'small muted' }, ` (${H.filter(x => !x.fields.odrzano).length} odloženo)`) : null);
       case ' ': return h('td', { style: 'text-align:right' }, h('button', { class: 'btn small', title: 'Dodaj novo ročište u ovaj predmet', onclick: ev => { ev.stopPropagation(); addHearing(c.id); } }, '+ Ročište'));
@@ -378,7 +381,7 @@ function viewCases() {
         h('span', { style: 'flex:1' }),
         h('button', { class: 'btn primary', onclick: () => { st.view = 'case'; st.caseId = null; st.pendingCase = null; st.step = list; st.edit = newEdit(list); if (st.sud && 'sud' in st.edit.draft) { st.edit.draft.sud = st.sud; st.edit.base = JSON.stringify(st.edit.draft); } render(); } }, newLabel)),
       h('div', { class: 'card' }, rows.length ? h('table', { class: 'grid' },
-        h('thead', {}, h('tr', {}, cols.filter(Boolean).map(c => h('th', {}, c)))),
+        h('thead', {}, h('tr', {}, cols.filter(Boolean).map(c => h('th', { title: NASLOVI[c] || '' }, c)))),
         h('tbody', {}, rows.slice(0, 500).map(c => h('tr', { class: 'click', onclick: () => openCase(c.id) }, cols.filter(Boolean).map(col => cell(c, col))))))
         : h('div', { class: 'empty' }, all.length ? 'Nijedan predmet ne odgovara pretrazi.' : `Još nema predmeta. Kliknite „${newLabel.slice(2)}” da unesete prvi${st.app.isAdmin ? ', ili uvezite postojeće podatke u Administraciji' : ''}.`)),
       rows.length > 500 ? h('p', { class: 'small muted' }, `Prikazano prvih 500 od ${rows.length} – suzite pretragu.`) : null));
