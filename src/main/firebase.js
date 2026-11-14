@@ -155,8 +155,11 @@ class Firestore {
       orderBy: [{ field: { fieldPath: '_modifiedAt' }, direction: 'ASCENDING' }] } });
     return (Array.isArray(r) ? r : []).filter(x => x.document).map(x => Firestore.doc(x.document));
   }
-  async commit(writes) {
-    const r = await this.req('POST', `${this.base}:commit`, { writes: writes.map(w => {
+  // rev: liste koje su izmijenjene; upisuje se vrijeme izmjene u meta/rev da bi ostali znali sta da preuzmu
+  async commit(writes, rev) {
+    const extra = rev && rev.length ? [{ update: { name: this.name('meta', 'rev'), fields: {} }, updateMask: { fieldPaths: [] },
+      updateTransforms: [...new Set(rev)].map(k => ({ fieldPath: 'l.' + k, setToServerValue: 'REQUEST_TIME' })) }] : [];
+    const r = await this.req('POST', `${this.base}:commit`, { writes: [...writes.map(w => {
       const t = [{ fieldPath: '_modifiedAt', setToServerValue: 'REQUEST_TIME' }];
       if (w.create) t.push({ fieldPath: '_createdAt', setToServerValue: 'REQUEST_TIME' });
       const out = { update: { name: this.name(w.col, w.id), fields: Object.fromEntries(Object.entries(w.data).map(([k, v]) => [k, enc(v)])) }, updateTransforms: t };
@@ -164,10 +167,11 @@ class Firestore {
       if (w.updateTime) out.currentDocument = { updateTime: w.updateTime };
       else if (w.mustNotExist) out.currentDocument = { exists: false };
       return out;
-    }) });
-    return (r.writeResults || []).map(x => x.updateTime);
+    }), ...extra] });
+    return (r.writeResults || []).slice(0, writes.length).map(x => x.updateTime);
   }
-  async remove(col, id) { await this.req('POST', `${this.base}:commit`, { writes: [{ delete: this.name(col, id) }] }); }
+  async remove(col, id, rev) { await this.req('POST', `${this.base}:commit`, { writes: [{ delete: this.name(col, id) },
+    ...(rev ? [{ update: { name: this.name('meta', 'rev'), fields: {} }, updateMask: { fieldPaths: [] }, updateTransforms: rev.map(k => ({ fieldPath: 'l.' + k, setToServerValue: 'REQUEST_TIME' })) }] : [])] }); }
 }
 
 module.exports = { Auth, Firestore, enc, dec, post };

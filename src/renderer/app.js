@@ -485,7 +485,7 @@ function validationCtx() {
   return ctx;
 }
 function dupOf(list, d, id) {
-  if (!S.LIST_BY_KEY[list].isCase || list === 'vaw_predmeti' || !d.Title) return null;
+  if (!S.LIST_BY_KEY[list].isCase || !d.Title) return null;
   const t = d.Title.trim().toLowerCase(), sud = (d.sud || '').trim();
   const nb = (d.napomenaBroja || '').trim().toLowerCase();
   return recs(list).find(r => r.id !== id && (r.fields.Title || '').trim().toLowerCase() === t && (r.fields.sud || '').trim() === sud && (r.fields.napomenaBroja || '').trim().toLowerCase() === nb);
@@ -494,7 +494,7 @@ function viewForm() {
   const e = st.edit, list = e.list, d = e.draft;
   const v = S.validate(list, d, validationCtx());
   const dup = dupOf(list, d, e.id);
-  if (dup) v.errors.Title = 'Predmet sa ovim brojem već postoji' + (d.sud ? ' u ovom sudu.' : '.');
+  if (dup) v.errors.Title = `Predmet ${dup.fields.Title} već postoji${d.sud ? ' u ovom sudu' : ''}${dup.createdBy ? ` (unio/la: ${dup.createdBy})` : ''}.`;
   const showAll = e.touched;
   const rec = e.id ? recs(list).find(r => r.id === e.id) : null;
   const els = [];
@@ -989,7 +989,7 @@ function viewSync() {
     h('div', { class: 'page' },
       h('div', { class: 'card pane' },
         h('div', { class: 'pane-head' }, h('div', {}, h('h2', {}, 'Stanje'),
-          h('div', { class: 'muted small' }, `Posljednja uspješna sinhronizacija: ${ago(st.app.lastSync)} · automatski svakih 5 minuta i nakon svakog čuvanja`)),
+          h('div', { class: 'muted small' }, `Posljednja uspješna sinhronizacija: ${ago(st.app.lastSync)} · automatski svakih 15 minuta i nakon svakog čuvanja`)),
           h('span', { class: 'grow' }),
           h('button', { class: 'btn primary', disabled: st.sync.state === 'syncing', onclick: async () => { const s = await api.syncNow(); logs = null;
             if (s && s.state === 'ok') toast('Sinhronizacija završena.', 'ok'); else if (s) toast(s.state === 'offline' ? 'Nema interneta – pokušaću ponovo automatski.' : (s.error || 'Greška'), 'err'); } }, 'Sinhronizuj sada')),

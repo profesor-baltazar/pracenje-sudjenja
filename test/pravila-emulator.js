@@ -65,6 +65,13 @@ const test = (ime, fn) => testovi.push([ime, fn]);
     await assertFails(setDoc(doc(ana(), 'users/ana@x.me'), { name: 'Ana', role: 'admin' }));
     await assertFails(setDoc(doc(ana(), 'meta/forms'), { json: '{}' }));
   });
+  test('oznaku izmjena (meta/rev) upisuje svaki odobreni korisnik, ali samo vremena lista', async () => {
+    const { serverTimestamp } = require('firebase/firestore');
+    await assertSucceeds(setDoc(doc(ana(), 'meta/rev'), { l: { predmeti: serverTimestamp() } }, { merge: true }));
+    await assertSucceeds(setDoc(doc(ivo(), 'meta/rev'), { l: { odlaganja: serverTimestamp() } }, { merge: true }));
+    await assertFails(setDoc(doc(ana(), 'meta/rev'), { l: {}, json: 'x' }, { merge: true }));
+    await assertFails(setDoc(doc(stranac(), 'meta/rev'), { l: { predmeti: serverTimestamp() } }, { merge: true }));
+  });
   test('novi zapis nosi vlasnika: svoj da, tuđi ne', async () => {
     await assertSucceeds(setDoc(doc(ana(), 'predmeti/novi'), { Title: 'Ks 9/26', _owner: 'ana@x.me' }));
     await assertFails(setDoc(doc(ana(), 'predmeti/lazni'), { Title: 'Ks 8/26', _owner: 'ivo@x.me' }));

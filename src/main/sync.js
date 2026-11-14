@@ -1,7 +1,9 @@
 'use strict';
 const Schema = require('../shared/schema.js');
 
-const FULL_EVERY_MS = 24 * 3600 * 1000;
+// sve liste se provjeravaju i bez oznake u meta/rev, za slucaj da je neko pisao starom verzijom
+const SWEEP_EVERY_MS = 6 * 3600 * 1000;
+const EPOCH = '1970-01-01T00:00:00Z';
 const BATCH = 100;
 
 function fromServer(listKey, data) {
@@ -24,6 +26,7 @@ function toServer(listKey, fields) {
   return out;
 }
 const minus = (ts, ms) => new Date(Date.parse(ts) - ms).toISOString();
+const newer = (a, b) => !!a && (!b || Date.parse(a) > Date.parse(b));
 
 class Sync {
   constructor({ store, fs, me, onStatus }) {
@@ -56,6 +59,18 @@ class Sync {
     }
   }
 
+  revBlocked() { const b = this.store.get('revBlockedAt'); return !!b && Date.now() - Date.parse(b) < 3600 * 1000; }
+  // ako server jos nema nova pravila, upis oznake izmjena se odbija; tada saljemo bez nje
+  async commit(writes, rev) {
+    if (this.revBlocked() || !rev) return this.fs.commit(writes);
+    try { return await this.fs.commit(writes, rev); } catch (e) {
+      if (e.fsStatus !== 'PERMISSION_DENIED') throw e;
+      const t = await this.fs.commit(writes);
+      this.store.set('revBlockedAt', new Date().toISOString());
+      this.store.log('warn', 'Server ne dozvoljava upis oznake izmjena (meta/rev). Objavite najnovija pravila (firestore.rules) u Firebase konzoli.');
+      return t;
+    }
+  }
   payload(r, extra) {
     const me = this.me();
     return { ...toServer(r.list, r.fields), _createdBy: r.createdBy || me.name, _modifiedBy: me.name, _deleted: false, ...(extra || {}) };
@@ -71,7 +86,7 @@ class Sync {
       this.status({ state: 'syncing', detail: `Šaljem nove zapise (${done + chunk.length}/${total})` });
       try {
         const owner = this.me().email;
-        const times = await this.fs.commit(chunk.map(r => ({ col: r.list, id: r.id, data: this.payload(r, { _owner: r.owner || owner }), mustNotExist: true, create: true })));
+        const times = await this.commit(chunk.map(r => ({ col: r.list, id: r.id, data: this.payload(r, { _owner: r.owner || owner }), mustNotExist: true, create: true })), chunk.map(r => r.list));
         this.store.batch(() => chunk.forEach((r, k) => this.store.db.run('UPDATE records SET remote=1, etag=?, dirty=0, owner=COALESCE(owner, ?) WHERE id=?', [times[k], r.owner || owner, r.id])));
       } catch (e) {
         if (e.code === 'offline' || e.code === 'login_required' || e.fsStatus === 'PERMISSION_DENIED') throw e;
@@ -85,7 +100,7 @@ class Sync {
       const chunk = dels.slice(i, i + BATCH);
       this.status({ state: 'syncing', detail: `Šaljem brisanja (${done + chunk.length}/${total})` });
       try {
-        await this.fs.commit(chunk.map(r => ({ col: r.list, id: r.id, data: { _deleted: true, _modifiedBy: this.me().name }, updateTime: r.etag })));
+        await this.commit(chunk.map(r => ({ col: r.list, id: r.id, data: { _deleted: true, _modifiedBy: this.me().name }, updateTime: r.etag })), chunk.map(r => r.list));
         this.store.batch(() => chunk.forEach(r => this.store.purge(r.id)));
       } catch (e) {
         if (e.code === 'offline' || e.code === 'login_required' || e.fsStatus === 'PERMISSION_DENIED') throw e;
@@ -103,12 +118,12 @@ class Sync {
         const existing = await this.fs.get(r.list, r.id);
         if (existing) { this.store.update(r.id, { remote: true, etag: existing.updateTime }); return this.pushOne({ ...r, remote: true, etag: existing.updateTime }, false); }
         const owner = r.owner || this.me().email;
-        const [t] = await this.fs.commit([{ col: r.list, id: r.id, data: this.payload(r, { _owner: owner }), mustNotExist: true, create: true }]);
+        const [t] = await this.commit([{ col: r.list, id: r.id, data: this.payload(r, { _owner: owner }), mustNotExist: true, create: true }], [r.list]);
         this.store.setOwner(r.id, owner);
         return this.store.markSynced(r.id, t);
       }
       const data = r.deleted ? { _deleted: true, _modifiedBy: this.me().name } : this.payload(r);
-      const [t] = await this.fs.commit([{ col: r.list, id: r.id, data, updateTime: r.etag }]);
+      const [t] = await this.commit([{ col: r.list, id: r.id, data, updateTime: r.etag }], [r.list]);
       if (r.deleted) { this.store.purge(r.id); this.store.log('info', `Obrisan zapis (${l.title}).`); }
       else this.store.markSynced(r.id, t);
     } catch (e) {
@@ -122,14 +137,21 @@ class Sync {
     }
   }
 
+  // cijela baza se preuzima samo prvi put i kad se promijene forme; inace samo liste koje su po meta/rev izmijenjene
   async pull() {
-    const full = !this.store.get('lastFull') || Date.now() - Date.parse(this.store.get('lastFull')) > FULL_EVERY_MS;
+    const full = !this.store.get('lastFull');
+    const rev = await this.fs.get('meta', 'rev'), revL = (rev && rev.data.l) || {};
+    // bez meta/rev (pravila jos nijesu objavljena) provjeravaju se sve liste kao ranije
+    const sweep = full || !rev || !this.store.get('lastSweep') || Date.now() - Date.parse(this.store.get('lastSweep')) > SWEEP_EVERY_MS;
+    if (!rev && !this.revBlocked()) await this.fs.commit([], ['meta']).catch(() => {});
+    this.rev = { l: revL, sweep };
+    const todo = Schema.LISTS.filter(l => { const cur = this.store.get('cursor:' + l.key); return full || !cur || sweep || newer(revL[l.key], cur); });
     let n = 0;
-    for (const l of Schema.LISTS) {
-      this.status({ state: 'syncing', detail: `Preuzimam: ${l.title} (${++n}/${Schema.LISTS.length})` });
+    for (const l of todo) {
+      this.status({ state: 'syncing', detail: `Preuzimam: ${l.title} (${++n}/${todo.length})` });
       const cur = this.store.get('cursor:' + l.key);
       const docs = full || !cur ? await this.fs.list(l.key) : await this.fs.changedSince(l.key, minus(cur, 2000));
-      let max = cur;
+      let max = cur || EPOCH;
       this.store.batch(() => {
         for (const d of docs) {
           this.store.upsertFromServer(l.key, d.id, d.updateTime, fromServer(l.key, d.data),
@@ -138,9 +160,12 @@ class Sync {
         }
         if (full || !cur) this.store.removeMissing(l.key, docs.map(d => d.id));
       });
-      if (max) this.store.set('cursor:' + l.key, max);
+      // sve do vremena procitanog u meta/rev je vec preuzeto
+      if (newer(revL[l.key], max)) max = revL[l.key];
+      this.store.set('cursor:' + l.key, max);
     }
     if (full) this.store.set('lastFull', new Date().toISOString());
+    if (sweep) this.store.set('lastSweep', new Date().toISOString());
   }
 
   // ako korisnik nije na listi, dalje ne citamo nista
@@ -151,8 +176,10 @@ class Sync {
     this.store.set('profile:' + me.email, u ? { role: u.data.role || 'monitor', name: u.data.name || me.email } : null);
     return !!u;
   }
-  async refreshMeta() {
-    if (!(await this.checkAccess())) return;
+  async refreshMeta(force) {
+    if (force && !(await this.checkAccess())) return;
+    const rv = this.rev || { l: {}, sweep: true }, seen = this.store.get('metaSeen');
+    if (!force && seen && !rv.sweep && !newer(rv.l.meta, seen)) return;
     const me = this.me();
     const ch = await this.fs.get('meta', 'choices');
     this.store.set('choices', ch ? ch.data : {});
@@ -161,6 +188,7 @@ class Sync {
     const admin = me.email && (this.store.get('profile:' + me.email) || {}).role === 'admin';
     this.store.set('formsDraft', admin ? parse(await this.fs.get('meta', 'forms_draft')) : null);
     this.store.set('tables', parse(await this.fs.get('meta', 'tables')));
+    this.store.set('metaSeen', rv.l.meta || EPOCH);
     this.onForms();
   }
   formsConfig() { return this.store.get('formsDraft') || this.store.get('forms') || null; }
@@ -171,23 +199,23 @@ class Sync {
   }
   async saveFormsDraft(cfg) {
     const me = this.me();
-    await this.fs.commit([{ col: 'meta', id: 'forms_draft', data: { json: JSON.stringify(cfg), by: me.name || me.email, at: new Date().toISOString() } }]);
+    await this.commit([{ col: 'meta', id: 'forms_draft', data: { json: JSON.stringify(cfg), by: me.name || me.email, at: new Date().toISOString() } }], ['meta']);
     this.store.set('formsDraft', cfg); this.onForms();
   }
   async publishForms() {
     const cfg = this.store.get('formsDraft'); if (!cfg) return false; const me = this.me();
-    await this.fs.commit([{ col: 'meta', id: 'forms', data: { json: JSON.stringify(cfg), by: me.name || me.email, at: new Date().toISOString() } }]);
-    await this.fs.remove('meta', 'forms_draft');
+    await this.commit([{ col: 'meta', id: 'forms', data: { json: JSON.stringify(cfg), by: me.name || me.email, at: new Date().toISOString() } }], ['meta']);
+    await this.fs.remove('meta', 'forms_draft', ['meta']);
     this.store.set('forms', cfg); this.store.set('formsDraft', null); this.onForms(); return true;
   }
   async saveTables(cfg) { const me = this.me();
-    await this.fs.commit([{ col: 'meta', id: 'tables', data: { json: JSON.stringify(cfg), by: me.name || me.email, at: new Date().toISOString() } }]);
+    await this.commit([{ col: 'meta', id: 'tables', data: { json: JSON.stringify(cfg), by: me.name || me.email, at: new Date().toISOString() } }], ['meta']);
     this.store.set('tables', cfg); }
-  async discardFormsDraft() { await this.fs.remove('meta', 'forms_draft'); this.store.set('formsDraft', null); this.onForms(); }
+  async discardFormsDraft() { await this.fs.remove('meta', 'forms_draft', ['meta']); this.store.set('formsDraft', null); this.onForms(); }
   async listUsers() { return (await this.fs.list('users')).map(u => ({ email: u.id, name: u.data.name || '', role: u.data.role || 'monitor' })).sort((a, b) => a.email.localeCompare(b.email)); }
   async setUser(email, name, role) { await this.fs.commit([{ col: 'users', id: email.trim().toLowerCase(), data: { name: name || '', role: role === 'admin' ? 'admin' : 'monitor' } }]); }
   async removeUser(email) { await this.fs.remove('users', email); }
-  async setChoices(map) { await this.fs.commit([{ col: 'meta', id: 'choices', data: map }]); this.store.set('choices', map); }
+  async setChoices(map) { await this.commit([{ col: 'meta', id: 'choices', data: map }], ['meta']); this.store.set('choices', map); }
   // bootstrap ne mozemo procitati prije odobrenja, zato samo probamo upis
   async claimAdmin(email, name) {
     try {

@@ -30,6 +30,8 @@ service cloud.firestore {
     match /meta/{doc} {
       allow read: if isUser();
       allow write: if isAdmin();
+      // oznaka izmjena: svaki korisnik upisuje samo vremena izmijenjenih lista
+      allow create, update: if doc == 'rev' && isUser() && request.resource.data.keys().hasOnly(['l']) && request.resource.data.l is map;
       allow create: if doc == 'bootstrap' && verified()
                     && request.resource.data.by == me()
                     && existsAfter(/databases/$(db)/documents/users/$(me()));

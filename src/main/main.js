@@ -18,7 +18,7 @@ if (!app.isPackaged && process.env.TM_USER_DATA) app.setPath('userData', process
 // samo jedna otvorena aplikacija na racunaru; drugo pokretanje samo prikaze postojeci prozor
 if (ZAMJENA < 0 && !app.requestSingleInstanceLock()) app.exit(0);
 app.on('second-instance', () => { if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); } });
-const SYNC_EVERY_MS = 5 * 60 * 1000;
+const SYNC_EVERY_MS = 15 * 60 * 1000;
 
 // podaci iz starog foldera (prije promjene imena)
 (function preseli() {
@@ -92,7 +92,7 @@ function handlers() {
     try {
       const prof = await fsdb.get('users', u.email);
       if (!prof && await sync.claimAdmin(u.email, u.email)) store.log('info', `${u.email} je postavljen za administratora (prvi korisnik projekta).`);
-      await sync.refreshMeta();
+      await sync.refreshMeta(true);
     } catch (e) { store.log('warn', 'Provjera korisnika: ' + e.message); }
     scheduleSync(100);
     return state();

@@ -531,11 +531,11 @@ function fakeFirebase() {
         if (LISTS.includes(col)) ok = isUser && (cur ? own(after) === own(cur.data) && (after._deleted !== true || isAdmin || own(cur.data) === email || caseOwn(cur.data) === email) && (cur.data._deleted !== true || isAdmin)
           : after._deleted !== true && (!own(after) || own(after) === email));
         else if (col === 'users') ok = isAdmin || (verified && id === email && data.role === 'admin' && !docs.has('meta/bootstrap') && body.writes.some(x => x.update && x.update.name.endsWith('meta/bootstrap')));
-        else if (col === 'meta') ok = isAdmin || (id === 'bootstrap' && verified && data.by === email);
+        else if (col === 'meta') ok = isAdmin || (id === 'bootstrap' && verified && data.by === email) || (id === 'rev' && isUser);
         if (!ok) return err(403, 'PERMISSION_DENIED');
         const t = now();
         const merged = w.updateMask && cur ? { ...cur.data, ...data } : data;
-        for (const tr of w.updateTransforms || []) merged[tr.fieldPath] = t;
+        for (const tr of w.updateTransforms || []) { const [a1, a2] = tr.fieldPath.split('.'); if (a2) merged[a1] = { ...(merged[a1] || {}), [a2]: t }; else merged[a1] = t; }
         if (w.updateMask && cur && cur.data._createdAt) merged._createdAt = cur.data._createdAt;
         staged.set(k, { data: merged, updateTime: t }); res.push({ updateTime: t });
       }
@@ -570,7 +570,7 @@ test('Firebase: prijava, prvi administrator, odobravanje korisnika', async () =>
   await adm.login();
   assert.strictEqual(await adm.sync.claimAdmin('admin@x.me', 'Admin'), true);
   assert.strictEqual(await adm.sync.claimAdmin('admin@x.me', 'Admin'), false, 'samo prvi put');
-  await adm.sync.refreshMeta(); assert.strictEqual(adm.store.get('profile:admin@x.me').role, 'admin');
+  await adm.sync.refreshMeta(true); assert.strictEqual(adm.store.get('profile:admin@x.me').role, 'admin');
   const ana = await newClient(dir, 'ana', 'ana@x.me', 'tajna2'); await ana.login();
   assert.strictEqual(await ana.sync.claimAdmin('ana@x.me', 'Ana'), false, 'drugi korisnik ne može postati administrator');
   let s = await ana.sync.run(); assert.strictEqual(s.state, 'noaccess'); assert.strictEqual(ana.store.get('profile:ana@x.me'), null);
@@ -694,6 +694,35 @@ test('forme administratora: nacrt, novi modul i polja, objava monitorima', async
   await adm.sync.publishForms(); s = await runA(); assert.strictEqual(s.state, 'ok');
   assert.strictEqual(adm.store.byId(p0.id).fields.c_ocjena, 'Dobro'); assert(S.fieldsOf('predmeti').find(f => f.name === 'c_ocjena').hidden);
   await adm.sync.saveFormsDraft(null); await adm.sync.publishForms(); await runA();
+});
+test('sinhronizacija: u mirovanju se čita samo oznaka izmjena', async () => {
+  const { fb, adm, ana } = global.__FB;
+  const orig = global.fetch; let calls = [];
+  global.fetch = async (url, opt) => { const u = String(url); if (u.includes('firestore')) calls.push(u.replace(/.*documents/, '') + (opt && opt.body && u.includes('runQuery') ? ' ' + JSON.parse(opt.body).structuredQuery.from[0].collectionId : '')); return orig(url, opt); };
+  try {
+    fb.setOnline(true);
+    await ana.sync.run(); calls = [];
+    let s = await ana.sync.run(); assert.strictEqual(s.state, 'ok', s.error);
+    assert.strictEqual(calls.length, 2, 'u mirovanju: korisnik i meta/rev, a ne sve liste: ' + calls.join(', '));
+    adm.store.saveLocal('svi_predmeti', 'nov1', { Title: 'K 9/26', sud: 'Osnovni sud u Baru' }, 'Admin');
+    s = await adm.sync.run(); assert.strictEqual(s.state, 'ok', s.error);
+    assert(fb.docs.get('meta/rev').data.l.svi_predmeti, 'upis označava izmijenjenu listu');
+    calls = []; s = await ana.sync.run(); assert.strictEqual(s.state, 'ok', s.error);
+    assert(ana.store.records('svi_predmeti').some(r => r.id === 'nov1'), 'izmjena stigla drugom korisniku');
+    assert.deepStrictEqual(calls.filter(c => c.includes('runQuery')).map(c => c.split(' ')[1]), ['svi_predmeti'], 'pita se samo izmijenjena lista');
+    // upis stare verzije (bez oznake) stiže pri povremenoj provjeri svih lista
+    fb.docs.set('svi_predmeti/star1', { data: { Title: 'K 10/26', _modifiedAt: new Date(Date.now() + 1000).toISOString(), _deleted: false }, updateTime: new Date().toISOString() });
+    await ana.sync.run(); assert(!ana.store.records('svi_predmeti').some(r => r.id === 'star1'));
+    ana.store.set('lastSweep', '2000-01-01T00:00:00Z'); await ana.sync.run();
+    assert(ana.store.records('svi_predmeti').some(r => r.id === 'star1'), 'povremena provjera nalazi upis bez oznake');
+    // server bez novih pravila: upis prolazi i bez oznake
+    const rule = fb.docs.get('meta/rev'); fb.docs.delete('meta/rev');
+    const g = global.fetch; global.fetch = async (url, opt) => { if (String(url).includes(':commit') && opt.body.includes('meta/rev')) return { ok: false, status: 403, statusText: '403', json: async () => ({ error: { status: 'PERMISSION_DENIED', message: 'x' } }) }; return g(url, opt); };
+    ana.store.saveLocal('svi_predmeti', 'nov2', { Title: 'K 11/26' }, 'Ana'); s = await ana.sync.run(); global.fetch = g;
+    assert.strictEqual(s.state, 'ok', s.error); assert(fb.docs.has('svi_predmeti/nov2')); assert(ana.store.get('revBlockedAt'));
+    s = await adm.sync.run(); assert(adm.store.records('svi_predmeti').some(r => r.id === 'nov2'), 'bez meta/rev provjeravaju se sve liste');
+    fb.docs.set('meta/rev', rule); ana.store.set('revBlockedAt', null);
+  } finally { global.fetch = orig; }
 });
 test('sankcije: opis, tabele za izvještaj i graditelj', () => {
   assert.strictEqual(S.sankcijaOpis({ glavnaSankcija: 'Kazna zatvora', zatvorGodina: 1, zatvorMjeseci: 6, uzMjeru: true, mjereBezbjednosti: ['Oduzimanje predmeta'] }),
