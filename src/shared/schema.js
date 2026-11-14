@@ -21,11 +21,11 @@
   ];
   const SPACES = [
     { key: 'okk', module: 'okk', title: 'Uvid u spise', lists: [['predmeti', 'Osnovni podaci'], ['faze', 'Podaci o ponovljenom suđenju'], ['odlaganja', 'Odlaganje ročišta', 1], ['mjere', 'Mjere procesne discipline', 1],
-      ['presuda1', 'Pravo na javno izricanje presude'], ['zalba', 'Drugostepeni postupak', 1], ['presuda2', 'Pravo na javno izricanje presude u drugostepenom postupku'], ['ishod', 'Ishod postupka'],
+      ['presuda1', 'Pravo na javno izricanje presude'], ['zalba', 'Drugostepeni postupak', 1], ['presuda2', 'Pravo na javno izricanje presude u drugostepenom postupku'], ['ishod', 'Ishod postupka', 1],
       ['pritvori', 'Pritvor', 1], ['jemstva', 'Jemstvo', 1], ['nadzor', 'Mjere nadzora', 1], ['vpl', 'Vanredni pravni ljekovi', 1], ['komentari', 'Komentari monitora', 1]] },
     { key: 'okk_roc', module: 'okk', title: 'Praćenje ročišta', lists: [['roc_predmeti', 'Praćeni predmet'], ['roc_rocista', 'Ročišta', 1]] },
     { key: 'svi', module: 'svi', title: 'Uvid u spise', lists: [['svi_predmeti', 'Osnovni podaci'], ['svi_faze', 'Podaci o ponovljenom suđenju'], ['svi_odlaganja', 'Odlaganje ročišta', 1], ['svi_mjere', 'Mjere procesne discipline', 1],
-      ['svi_presuda1', 'Pravo na javno izricanje presude'], ['svi_zalba', 'Drugostepeni postupak', 1], ['svi_ishod', 'Ishod postupka'],
+      ['svi_presuda1', 'Pravo na javno izricanje presude'], ['svi_zalba', 'Drugostepeni postupak', 1], ['svi_ishod', 'Ishod postupka', 1],
       ['svi_pritvori', 'Pritvor', 1], ['svi_jemstva', 'Jemstvo', 1], ['svi_nadzor', 'Mjere nadzora', 1], ['svi_vpl', 'Vanredni pravni ljekovi', 1], ['svi_komentari', 'Komentari monitora', 1]] },
     { key: 'svi_roc', module: 'svi', title: 'Praćenje ročišta', lists: [['svir_predmeti', 'Praćeni predmet'], ['svir_rocista', 'Ročišta', 1]] },
     { key: 'vaw', module: 'vaw', title: 'Predmeti', lists: [['vaw_predmeti', 'Podaci o predmetu']] },
@@ -37,6 +37,16 @@
   const listsOf = spaceKey => LISTS.filter(l => l.space === spaceKey);
   const baseKey = k => k.replace(/^(svi_|svir_|roc_|vaw_)/, '');
 
+  // krivicne sankcije po KZ CG (cl. 33, 52, 61, 67)
+  const SANKCIJE = ['Kazna dugotrajnog zatvora', 'Kazna zatvora', 'Kazna zatvora koja se izvršava u prostorijama za stanovanje', 'Novčana kazna', 'Kazna rada u javnom interesu',
+    'Uslovna osuda', 'Uslovna osuda sa zaštitnim nadzorom', 'Sudska opomena', 'Vaspitna mjera', 'Mjera bezbjednosti', 'Oslobađajuća presuda', 'Odbijajuća presuda'];
+  const MJERE_BEZBJEDNOSTI = ['Obavezno psihijatrijsko liječenje i čuvanje u zdravstvenoj ustanovi', 'Obavezno psihijatrijsko liječenje na slobodi', 'Obavezno liječenje narkomana',
+    'Obavezno liječenje alkoholičara', 'Zabrana vršenja poziva, djelatnosti i dužnosti', 'Zabrana upravljanja motornim vozilom', 'Oduzimanje predmeta', 'Protjerivanje stranca iz zemlje',
+    'Javno objavljivanje presude', 'Zabrana približavanja', 'Udaljenje iz stana ili drugog prostora za stanovanje'];
+  const ZASTITNI_NADZOR = ['Javljanje organu nadležnom za izvršenje zaštitnog nadzora', 'Osposobljavanje za određeno zanimanje', 'Prihvatanje zaposlenja koje odgovara sposobnostima i sklonostima',
+    'Ispunjavanje obaveza izdržavanja porodice, čuvanja i vaspitanja djece i drugih porodičnih obaveza', 'Uzdržavanje od posjećivanja određenih mjesta, lokala ili priredbi',
+    'Blagovremeno obavještavanje o promjeni mjesta boravka, adrese ili radnog mjesta', 'Uzdržavanje od upotrebe droge ili alkoholnih pića', 'Liječenje u odgovarajućoj zdravstvenoj ustanovi',
+    'Posjećivanje profesionalnih i drugih savjetovališta ili ustanova i postupanje po njihovim uputstvima', 'Otklanjanje ili ublažavanje štete, a naročito izmirenje sa žrtvom'];
   const FALLBACK_CHOICES = {
     'predmeti.Vrstapredmeta': ['Organizovani kriminal', 'Visoka korupcija'], 'roc_predmeti.Vrstapredmeta': ['Organizovani kriminal', 'Visoka korupcija'],
     'predmeti.Vrstaoptu_x017e_nogakta': ['Optužnica', 'Optužni predlog'],
@@ -65,8 +75,8 @@
     'predmeti.kontrolaNacin': ['Ročište za kontrolu optužnice', 'Bez ročišta – pisano izjašnjenje odbrane'],
     'pritvori.mjereNadzora': ['Zabrana napuštanja stana', 'Zabrana napuštanja boravišta', 'Obaveza javljanja državnom organu', 'Privremeno oduzimanje putne isprave',
       'Privremeno oduzimanje vozačke dozvole', 'Zabrana posjećivanja određenih mjesta', 'Zabrana približavanja i komunikacije sa određenim licima', 'Elektronski nadzor', 'Drugo'],
-    'vaw_predmeti.glavnaSankcija': ['Kazna zatvora', 'Kazna zatvora koja se izvršava u prostorijama za stanovanje', 'Uslovna osuda', 'Uslovna osuda sa zaštitnim nadzorom',
-      'Kazna rada u javnom interesu', 'Novčana kazna', 'Mjera bezbjednosti', 'Oslobađajuća presuda', 'Odbijajuća presuda'],
+    'vaw_predmeti.glavnaSankcija': SANKCIJE,
+    'ishod.vrstaPresude': ['Prvostepena', 'Pravosnažna'],
     'vpl.vrsta': ['Zahtjev za zaštitu zakonitosti', 'Zahtjev za vanredno ublažavanje kazne', 'Zahtjev za ponavljanje postupka'],
     'odlaganja.Razlogodlaganja': RAZLOZI,
     'rocista.objasnio': ['Objasnio', 'Pročitao'], 'rocista.prekidRazlog': ['Radi pripremanja odbrane', 'Radi odmora', 'Drugo'],
@@ -159,6 +169,21 @@
   const zrtveOf = c => Array.isArray(c.zrtve) && c.zrtve.length ? c.zrtve
     : (c.odnos || c.prijavljivala || c.pridruzila ? [{ odnos: c.odnos || null, prijavljivala: c.prijavljivala === true, pridruzila: c.pridruzila === true }] : []);
   const OPT_POLJA = ['osudjivan', 'istovrsna', 'detaljiPresuda', 'glavnaSankcija', 'zatvorGodina', 'zatvorMjeseci', 'zatvorDana', 'zatvorKategorija', 'mjeraBezbjednosti', 'sankcija'];
+  // vrsta sankcije odredjuje koja se dodatna polja popunjavaju
+  const sankTip = x => { const g = x.glavnaSankcija || '';
+    return !g ? null : /^Uslovna osuda sa/.test(g) ? 'zn' : /^Uslovna osuda/.test(g) ? 'uo' : /zatvor/i.test(g) ? 'zatvor' : /^Novčana/.test(g) ? 'novcana'
+      : /rada u javnom/.test(g) ? 'rad' : g === 'Mjera bezbjednosti' ? 'mb' : /^(Oslobađajuća|Odbijajuća)/.test(g) ? 'bez' : 'ostalo'; };
+  const trajanjeText = (g, m, d) => [g ? `${g} god.` : '', m ? `${m} mj.` : '', d ? `${d} dana` : ''].filter(Boolean).join(' ');
+  const sankcijaOpis = x => { const t = sankTip(x); if (!t) return x.sankcija || ''; const dio = [x.glavnaSankcija];
+    if (t === 'zatvor') dio.push(trajanjeText(x.zatvorGodina, x.zatvorMjeseci, x.zatvorDana));
+    if (t === 'novcana' && x.novcanaIznos) dio.push(`${x.novcanaIznos} €`);
+    if (t === 'rad' && x.radCasova) dio.push(`${x.radCasova} časova`);
+    if (t === 'uo' || t === 'zn') { const k = trajanjeText(x.uoGodina, x.uoMjeseci, x.uoDana), v = trajanjeText(x.provjeraGodina, x.provjeraMjeseci);
+      if (k) dio.push(`utvrđena kazna ${k}`); if (v) dio.push(`provjeravanje ${v}`); }
+    const mb = Array.isArray(x.mjereBezbjednosti) ? x.mjereBezbjednosti : [];
+    let txt = dio.filter(Boolean).join(', ');
+    if (mb.length && (t === 'mb' || x.uzMjeru)) txt += (t === 'mb' ? ': ' : '; mjera bezbjednosti: ') + mb.join(', ').toLowerCase();
+    return txt; };
   // optuzeni predmeta; stari unos (jedan optuzeni u poljima predmeta) vraca se kao jedan
   const optuzeniOf = c => Array.isArray(c.optuzeni) && c.optuzeni.length ? c.optuzeni
     : (OPT_POLJA.some(k => c[k] !== null && c[k] !== undefined && c[k] !== '' && c[k] !== false) ? [{ oznaka: null, ...Object.fromEntries(OPT_POLJA.map(k => [k, c[k] ?? null])) }] : []);
@@ -297,9 +322,11 @@
     { name: 'odlucivanje', label: 'Odlučivanje po žalbi', type: 'choice' },
     { name: 'Odlukaudrugostepenompostupku', label: 'Odluka u drugostepenom postupku', type: 'choice' }];
   const ishodForm = t => [P(t),
-    { name: 'sankcija', label: 'Sankcija koju je sud izrekao (ukratko)', type: 'text' },
-    { name: 'Prvostepenapresuda', label: 'Prvostepena presuda', type: 'longtext' },
-    { name: 'Pravosna_x017e_napresuda', label: 'Pravosnažna presuda', type: 'longtext' }];
+    { name: 'vrstaPresude', label: 'Sankcije su iz presude', type: 'choice' },
+    { name: 'osudjeni', label: 'Izrečene sankcije', type: 'osudjeni', wide: true },
+    { name: 'sankcija', label: 'Ranije upisano (tekst)', type: 'text', show: r => !!r.sankcija },
+    { name: 'Prvostepenapresuda', label: 'Prvostepena presuda', type: 'longtext', hidden: true },
+    { name: 'Pravosna_x017e_napresuda', label: 'Pravosnažna presuda', type: 'longtext', hidden: true }];
   const datOd = r => r.Datumodre_x0111_ivanjapritvora;
   let pritvoriForm = function (t) {
     const after = (f, base, msg) => r => days(r[base], r[f]) < 0 ? msg : null;
@@ -918,7 +945,8 @@
       case 'mjere': return `${r.Mjera || 'Mjera'} · ${r.U_x010d_esnik || ''}${r.Nov_x010d_anakazna ? ' · €' + r.Nov_x010d_anakazna : ''}`;
       case 'presuda1': case 'presuda2': return `Objavljena ${fmtDate(r.Datumobjavljivanjapresude) || '—'}`;
       case 'zalba': return `Žalba ${fmtDate(r.Datumpodno_x0161_enja_x017e_albe) || '—'}${r.Odlukaudrugostepenompostupku ? ' · ' + r.Odlukaudrugostepenompostupku : ''}`;
-      case 'ishod': return (r.sankcija || r.Pravosna_x017e_napresuda || r.Prvostepenapresuda || 'Ishod').slice(0, 80);
+      case 'ishod': { const t = (r.osudjeni || []).map(x => (x.oznaka ? x.oznaka + ': ' : '') + sankcijaOpis(x)).filter(Boolean).join('; ') || r.sankcija || r.Pravosna_x017e_napresuda || r.Prvostepenapresuda || 'Ishod';
+        const x = (r.vrstaPresude ? r.vrstaPresude + ' presuda – ' : '') + t; return x.length > 220 ? x.slice(0, 219) + '…' : x; }
       case 'pritvori': return `${r.liceBr ? 'Lice ' + r.liceBr : r.Okrivljeni_x002f_Optu_x017e_eni || 'Lice'} · od ${fmtDate(r.Datumodre_x0111_ivanjapritvora) || '?'}${r.Datumukidanjapritvora ? ' do ' + fmtDate(r.Datumukidanjapritvora) : ''}`;
       case 'nadzor': return `${r.liceBr ? 'Lice ' + r.liceBr : r.okrivljeni || 'Lice'} · ${(r.mjere || []).join(', ') || 'mjere nisu upisane'}`;
       case 'jemstva': return `${r.liceBr ? 'Lice ' + r.liceBr : r.Optu_x017e_eni || 'Lice'}${r.Odlukasuda ? ' · ' + r.Odlukasuda : ''}`;
@@ -934,7 +962,7 @@
   }
 
   const isPhased = listKey => PHASED.includes(baseKey(listKey));
-  const api = { zrtveOf, optuzeniOf, OPT_POLJA, TOK_DOGADJAJI, TOK_KRAJ, TOK_FAZE, TOK_STARA, TOK_IZVEDENA, tokFaza, tokIzStarog, tokUStaro, tokProvjera, tokPregled, tokSort, CUSTOM_TYPES, isCustomKey, isCustomField, applyCustom, customConfig, newKey, SDT_IZMJENE, SDT_GRUPE, sdtRezim, sdtDozvoljen, sdtProvjera, isOkk, ROC_MJERE, rocMjere, rocMjereZbir, ODL_UCESNICI, ODL_DOSTAVA, ODL_GRUPE, ODL_OPIS, rocRazlozi, KZ, DODACI, kzClan, tackeU, djeloText, djelaText, parseDjela, OBAVEZNA_POLJA, OZNAKE, oznakeFor, splitCaseNo, normCaseNo, dateRules, ZKP_IZMJENE_2026, noviZKP, addMonths, potvrdaRok, PHASED, isPhased, MODULES, SPACES, SPACE_BY_KEY, LISTS, LIST_BY_KEY, FORMS, FALLBACK_CHOICES, SUDOVI, listsOf, baseKey, choiceKeys, fallbackChoices,
+  const api = { zrtveOf, optuzeniOf, OPT_POLJA, SANKCIJE, MJERE_BEZBJEDNOSTI, ZASTITNI_NADZOR, sankTip, sankcijaOpis, TOK_DOGADJAJI, TOK_KRAJ, TOK_FAZE, TOK_STARA, TOK_IZVEDENA, tokFaza, tokIzStarog, tokUStaro, tokProvjera, tokPregled, tokSort, CUSTOM_TYPES, isCustomKey, isCustomField, applyCustom, customConfig, newKey, SDT_IZMJENE, SDT_GRUPE, sdtRezim, sdtDozvoljen, sdtProvjera, isOkk, ROC_MJERE, rocMjere, rocMjereZbir, ODL_UCESNICI, ODL_DOSTAVA, ODL_GRUPE, ODL_OPIS, rocRazlozi, KZ, DODACI, kzClan, tackeU, djeloText, djelaText, parseDjela, OBAVEZNA_POLJA, OZNAKE, oznakeFor, splitCaseNo, normCaseNo, dateRules, ZKP_IZMJENE_2026, noviZKP, addMonths, potvrdaRok, PHASED, isPhased, MODULES, SPACES, SPACE_BY_KEY, LISTS, LIST_BY_KEY, FORMS, FALLBACK_CHOICES, SUDOVI, listsOf, baseKey, choiceKeys, fallbackChoices,
     fieldsOf, isVisible, sectionVisible, validate, summarize, caseTitle, isEmpty, isDate, days, dayNum, fmtDate };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Schema = api;
 })(typeof self !== 'undefined' ? self : this);

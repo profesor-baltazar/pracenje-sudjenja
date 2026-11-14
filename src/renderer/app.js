@@ -60,9 +60,20 @@ function statData(module) {
   return d;
 }
 const drugiOtvoren = {};
-const zatvorIzrecen = x => /zatvor/i.test(x.glavnaSankcija || '');
 const optNaslov = (x, i) => `Optuženi ${i + 1}${x.oznaka ? ' – ' + x.oznaka : ''}`;
 const PRAZAN_OPT = { oznaka: null, osudjivan: false, istovrsna: false, detaljiPresuda: null, glavnaSankcija: null, zatvorGodina: null, zatvorMjeseci: null, zatvorDana: null, mjeraBezbjednosti: null, sankcija: null };
+const tip = (...t) => x => t.includes(S.sankTip(x));
+const SANK_POLJA = [['glavnaSankcija', 'choice', 'Glavna sankcija', { izbori: S.SANKCIJE }],
+  ['zatvor', 'trajanje', 'Trajanje kazne zatvora', { polja: ['zatvorGodina', 'zatvorMjeseci', 'zatvorDana'], max: [40, 12, 31], show: tip('zatvor') }],
+  ['novcanaIznos', 'number', 'Iznos novčane kazne (€)', { show: tip('novcana'), cls: 'pola' }],
+  ['radCasova', 'number', 'Broj časova rada', { max: 360, show: tip('rad'), cls: 'pola', hint: 'Od 60 do 360 časova (čl. 41 KZ)' }],
+  ['uo', 'trajanje', 'Utvrđena kazna zatvora', { polja: ['uoGodina', 'uoMjeseci', 'uoDana'], max: [2, 12, 31], show: tip('uo', 'zn'), hint: 'Kazna koja se neće izvršiti ako osuđeni ne učini novo krivično djelo' }],
+  ['provjera', 'trajanje', 'Vrijeme provjeravanja', { polja: ['provjeraGodina', 'provjeraMjeseci'], max: [5, 12], show: tip('uo', 'zn'), hint: 'Od 1 do 5 godina (čl. 53 KZ)' }],
+  ['zastitniNadzor', 'checks', 'Sadržina zaštitnog nadzora', { izbori: S.ZASTITNI_NADZOR, show: tip('zn'), hint: 'Obaveze iz čl. 61 KZ' }],
+  ['uzMjeru', 'bool', 'Uz glavnu sankciju izrečena je i mjera bezbjednosti', { show: tip('zatvor', 'novcana', 'rad', 'uo', 'zn', 'ostalo') }],
+  ['mjereBezbjednosti', 'checks', 'Izrečene mjere bezbjednosti', { izbori: S.MJERE_BEZBJEDNOSTI, show: x => S.sankTip(x) === 'mb' || (x.uzMjeru === true && tip('zatvor', 'novcana', 'rad', 'uo', 'zn', 'ostalo')(x)) }],
+  ['mjeraBezbjednosti', 'text', 'Ranije upisano (tekst)', { show: x => !!x.mjeraBezbjednosti }],
+  ['sankcija', 'text', 'Napomena o sankciji (nije obavezno)', { hint: 'Ako je oslobođen optužbi, upisati najvažnije razloge' }]];
 const GRUPE = {
   zrtve: { of: c => S.zrtveOf(c), naslov: (x, i) => `Žrtva ${i + 1}`, dodaj: '+ Dodaj žrtvu', prazno: { odnos: null, opisOdnosa: null, prijavljivala: false, pridruzila: false },
     polja: [['odnos', 'combo', 'Odnos žrtve sa optuženim', { izbori: 'odnos', cls: 'pola', hint: 'Za lica koja nisu srodnici izaberite jednu od kategorija poznanstva (pređite mišem preko polja za objašnjenje). Ako odnos nije na listi, izaberite „Drugi odnos” i upišite ga.',
@@ -74,12 +85,9 @@ const GRUPE = {
       ['osudjivan', 'bool', 'Optuženi je prethodno osuđivan'],
       ['istovrsna', 'bool', 'Prethodno osuđivan za istovjetna ili istovrsna krivična djela', { show: x => x.osudjivan === true }],
       ['detaljiPresuda', 'longtext', 'Detalji prethodnih presuda (kada, vrsta i visina sankcije)', { show: x => x.osudjivan === true }]] },
-  sankcije: { polje: 'optuzeni', of: c => S.optuzeniOf(c), naslov: optNaslov, dodaj: null, prazno: PRAZAN_OPT,
-    polja: [['glavnaSankcija', 'choice', 'Glavna sankcija', { izbori: 'glavnaSankcija' }],
-      ['zatvorGodina', 'number', 'Godine', { max: 40, show: zatvorIzrecen, cls: 'trecina' }], ['zatvorMjeseci', 'number', 'Mjeseci', { max: 12, show: zatvorIzrecen, cls: 'trecina' }],
-      ['zatvorDana', 'number', 'Dani', { max: 31, show: zatvorIzrecen, cls: 'trecina' }],
-      ['mjeraBezbjednosti', 'text', 'Mjera bezbjednosti, visina novčane kazne i sl.'],
-      ['sankcija', 'text', 'Sankcija – opis', { hint: 'Ako je oslobođen optužbi, upisati najvažnije razloge' }]] },
+  sankcije: { polje: 'optuzeni', of: c => S.optuzeniOf(c), naslov: optNaslov, dodaj: null, prazno: PRAZAN_OPT, polja: SANK_POLJA },
+  osudjeni: { of: r => Array.isArray(r.osudjeni) ? r.osudjeni : [], naslov: optNaslov, dodaj: '+ Dodaj optuženog', prazno: { oznaka: null, glavnaSankcija: null },
+    polja: [['oznaka', 'text', 'Optuženi (ime ili oznaka, nije obavezno)', { cls: 'pola' }], ...SANK_POLJA] },
 };
 const NIJE_BILO = { zalba: 'Nije bilo žalbe', mjere: 'Sud nije izricao mjere procesne discipline', vpl: 'Nije bilo vanrednih pravnih ljekova', komentari: 'Monitor nema komentara' };
 const nijeKey = list => S.isPhased(list) ? `${S.baseKey(list)}:${st.faza}` : S.baseKey(list);
@@ -492,7 +500,7 @@ function viewForm() {
   const els = [];
   let secVisible = true;
   const vctx = validationCtx(); curV = v;
-  const WIDE = ['longtext', 'multichoice', 'djela', 'razlozi', 'mjereunosi', 'pritvortok', 'zrtve', 'optuzeni', 'sankcije'];
+  const WIDE = ['longtext', 'multichoice', 'djela', 'razlozi', 'mjereunosi', 'pritvortok', 'zrtve', 'optuzeni', 'sankcije', 'osudjeni'];
   const shown = f => !f.section && !f.break && f.name && f.name !== 'Predmet' && !f.hidden && (st.showAllFields || S.isVisible(f, d, vctx));
   const FL = S.FORMS[list]; let col = 0, thirds = 0, rowStart = false;
   if (['pritvori', 'jemstva', 'nadzor'].includes(S.baseKey(list)) && d.liceBr) els.push(h('div', { class: 'section lice' }, `Lice ${d.liceBr}`));
@@ -607,11 +615,13 @@ function input(f, list, d) {
         r.ostali.some(x => S.ODL_OPIS.includes(x)) || r.opis ? h('div', { class: 'rz-grupa' }, h('div', { class: 'rz-naslov' }, 'Opis razloga'),
           h('input', { type: 'text', placeholder: 'Opišite razlog (viša sila, drugi razlozi…)', value: r.opis || '', 'data-key': `${key}.opis`, oninput: e => save({ opis: e.target.value || null }) })) : null);
     }
-    case 'zrtve': case 'optuzeni': case 'sankcije': {
+    case 'zrtve': case 'optuzeni': case 'sankcije': case 'osudjeni': {
       const G = GRUPE[f.type], polje = G.polje || f.name, saved = G.of(d);
       const list0 = saved.length ? saved.map(x => ({ ...x })) : [{ ...G.prazno }];
       const put = n => setVal(polje, n.length ? n : null);
-      const upd = (i, patch) => put(list0.map((x, j) => j === i ? { ...x, ...patch } : x));
+      const ocisti = x => { for (const [n, tip, , opt] of G.polja) if (opt && opt.show && !opt.show(x)) for (const k of (opt.polja || [n])) if (x[k] !== undefined && x[k] !== null && x[k] !== false && !(Array.isArray(x[k]) && !x[k].length)) x[k] = tip === 'bool' ? false : null; return x; };
+      const upd = (i, patch) => put(list0.map((x, j) => j === i ? ocisti({ ...x, ...patch }) : x));
+      const izbori = opt => Array.isArray(opt.izbori) ? opt.izbori : choicesOf(list, opt.izbori);
       const pk = (i, n) => `${key}.${i}.${n}`;
       const unos = (x, i, [n, tip, lbl, opt]) => {
         opt = opt || {};
@@ -619,9 +629,16 @@ function input(f, list, d) {
         if (tip === 'bool') return h('div', { class: 'zrtva-q' }, h('span', {}, lbl), h('div', { class: 'seg' },
           h('button', { class: x[n] === true ? 'on' : '', 'data-key': pk(i, n) + '.da', onclick: () => upd(i, { [n]: true }) }, 'Da'),
           h('button', { class: x[n] !== true ? 'on' : '', 'data-key': pk(i, n) + '.ne', onclick: () => upd(i, { [n]: false }) }, 'Ne')));
+        if (tip === 'trajanje') { const nazivi = ['godine', 'mjeseci', 'dani'];
+          return h('div', { class: 'field grupa-polje' }, h('label', {}, lbl), h('div', { class: 'trajanje' }, opt.polja.map((k, j) => h('label', { class: 'mini' }, nazivi[j],
+            h('input', { type: 'number', min: 0, max: opt.max[j], step: 1, value: x[k] ?? '', 'data-key': pk(i, k), oninput: e => upd(i, { [k]: e.target.value === '' ? null : Number(e.target.value) }) })))),
+            opt.hint ? h('div', { class: 'hint' }, opt.hint) : null); }
+        if (tip === 'checks') { const cur = Array.isArray(x[n]) ? x[n] : [];
+          return h('div', { class: 'field grupa-polje' }, h('label', {}, lbl), h('div', { class: 'checks' }, izbori(opt).map((o, j) => h('label', {}, h('input', { type: 'checkbox', checked: cur.includes(o), 'data-key': pk(i, n) + '.' + j,
+            onchange: e => upd(i, { [n]: e.target.checked ? [...cur, o] : cur.filter(y => y !== o) }) }), `${j + 1}) ${o}`))), opt.hint ? h('div', { class: 'hint' }, opt.hint) : null); }
         const inp = tip === 'longtext' ? h('textarea', { 'data-key': pk(i, n), oninput: e => upd(i, { [n]: e.target.value || null }) }, x[n] || '')
           : tip === 'choice' ? h('select', { 'data-key': pk(i, n), onchange: e => upd(i, { [n]: e.target.value || null }) }, h('option', { value: '' }, '— izaberite —'),
-              [...new Set([...choicesOf(list, opt.izbori), ...(x[n] ? [x[n]] : [])])].map(o => h('option', { value: o, selected: x[n] === o }, o)))
+              [...new Set([...izbori(opt), ...(x[n] ? [x[n]] : [])])].map(o => h('option', { value: o, selected: x[n] === o }, o)))
           : tip === 'combo' ? (() => { const opts = choicesOf(list, opt.izbori), drugi = !!x[n] && !opts.includes(x[n]), dk = pk(i, n) + '.drugi';
               return h('div', { class: 'combo' },
                 h('select', { 'data-key': pk(i, n), title: opt.title || null, onchange: e => { const v = e.target.value; if (v === '__drugi') { drugiOtvoren[dk] = true; upd(i, { [n]: null }); } else { delete drugiOtvoren[dk]; upd(i, { [n]: v || null }); } } },
@@ -915,7 +932,8 @@ function filterEditor(arr, cat, label) {
 }
 // --- graditelj tabela ---
 function viewTableBuilder(mod) {
-  const d = tb.def, units = mod.spaces.flatMap(sp => S.listsOf(sp).filter(l => !l.archived).map(l => ({ l, sp: S.SPACE_BY_KEY[sp] })));
+  const d = tb.def, units = mod.spaces.flatMap(sp => S.listsOf(sp).filter(l => !l.archived).flatMap(l => [{ l, sp: S.SPACE_BY_KEY[sp] },
+    S.baseKey(l.key) === 'ishod' ? { l: { key: l.key + ST.OSUDJENI, title: 'Sankcija optuženog (Ishod postupka)' }, sp: S.SPACE_BY_KEY[sp] } : null].filter(Boolean)));
   const cat = ST.fieldCatalog(d.unit), rm = cat.find(c => c.id === d.rows.field);
   let prev = null; try { prev = ST.customTable(d, statData(mod.key), choicesOf); } catch (e) { prev = { columns: ['Greška'], rows: [[e.message]] }; }
   const row = (label, ...c) => h('div', { class: 'fbrow' }, h('label', {}, label), ...c);

@@ -800,8 +800,18 @@
     return m <= 6 ? 'Do 6 mjeseci' : m <= 12 ? 'Od 6 mjeseci do 1 godine' : 'Preko 1 godine'; };
   const fmtTerm = mj => { const tot = Math.round(mj * 30), g = Math.floor(tot / 360), m = Math.floor((tot % 360) / 30), d = tot % 30;
     return [g ? `${g} god.` : '', m ? `${m} mj.` : '', d ? `${d} dana` : ''].filter(Boolean).join(' ') || '0 dana'; };
+  const mjOf = (g, m, d) => [g, m, d].every(v => v === null || v === undefined || v === '') ? null : (Number(g) || 0) * 12 + (Number(m) || 0) + (Number(d) || 0) / 30;
+  const uoMj = c => mjOf(c.uoGodina, c.uoMjeseci, c.uoDana), provMj = c => mjOf(c.provjeraGodina, c.provjeraMjeseci, null);
+  const zatvorTip = c => S.sankTip(c) === 'zatvor';
+  // mjere bezbjednosti se racunaju samo ako su izrecene kao glavna sankcija ili uz drugu sankciju
+  const mbOf = c => { const t = S.sankTip(c), a = Array.isArray(c.mjereBezbjednosti) ? c.mjereBezbjednosti : [];
+    return t === 'mb' || (c.uzMjeru === true && t && t !== 'bez') ? a : []; };
+  const KAT4 = ['Do 6 mjeseci', 'Od 6 mjeseci do 1 godine', 'Od 1 do 5 godina', 'Preko 5 godina'];
+  const kat4 = c => { const m = zatvorMj(c); return m === null ? null : m <= 6 ? KAT4[0] : m <= 12 ? KAT4[1] : m <= 60 ? KAT4[2] : KAT4[3]; };
+  const avgTerm = xs => { const v = xs.filter(x => x !== null && x !== undefined && isFinite(x)); return v.length ? fmtTerm(sum(v) / v.length) : '—'; };
+  const sankRed = k => { const i = S.SANKCIJE.indexOf(k); return i < 0 ? 99 : i; };
   function vawSanctions(cs) {
-    const zat = c => /^Kazna zatvora/.test(c.glavnaSankcija || ''), kuc = c => /prostorijama za stanovanje/.test(c.glavnaSankcija || ''), uo = c => /^Uslovna osuda/.test(c.glavnaSankcija || '');
+    const zat = c => /^Kazna (zatvora|dugotrajnog zatvora)/.test(c.glavnaSankcija || ''), kuc = c => /prostorijama za stanovanje/.test(c.glavnaSankcija || ''), uo = c => /^Uslovna osuda/.test(c.glavnaSankcija || '');
     const kat = k => c => zat(c) && zatvorKat(c) === k;
     const is = c => c.istovrsna === true, ol = c => c.olaksavajucaNepridruzivanje === true;
     const withSan = cs.filter(c => c.glavnaSankcija);
@@ -1185,9 +1195,10 @@
     const zDur = z => isDate(z.Datumpodno_x0161_enja_x017e_albe) && isDate(z.Datumdono_x0161_enjadrugostepene) ? days(z.Datumpodno_x0161_enja_x017e_albe, z.Datumdono_x0161_enjadrugostepene) : null;
     out.push(courtRows('Prikaz predmeta praćenih uvidom u spise prema broju drugostepenih postupaka, po sudovima', cs, SP.map(([h, f]) => [h, x => Z(x.filter(f)).length])),
       courtRows('Prosječno trajanje drugostepenog postupka, u danima', cs, SP.map(([h, f]) => [h, x => avgR(Z(x.filter(f)).map(zDur), 'int')]), 'Od podnošenja žalbe do donošenja drugostepene odluke.'));
-    const r26 = cs.filter(c => pNak(c) && ix.zalba(c._id).some(z => /preinačuje/.test(z.Odlukaudrugostepenompostupku || ''))).map(c => { const is = D.ixAll.ishod(c._id)[0] || {};
+    const r26 = cs.filter(c => pNak(c) && ix.zalba(c._id).some(z => /preinačuje/.test(z.Odlukaudrugostepenompostupku || ''))).map(c => { const sve = D.ixAll.ishod(c._id), is = sve[0] || {};
+      const opisi = v => sve.filter(x => x.vrstaPresude === v).map(x => (x.osudjeni || []).map(S.sankcijaOpis).filter(Boolean).join('; ')).filter(Boolean).join(' / ');
       const dur = vals(detRecs({ ...D, ix: D.ixAll }, [c]).map(x => x.ph.ukupno));
-      return [S.caseTitle ? S.caseTitle(c) : c.Title, is.Prvostepenapresuda || is.sankcija || DASH, is.Pravosna_x017e_napresuda || DASH, dur.length ? `${fmtNum(sum(dur), 0)} dana` : DASH]; });
+      return [S.caseTitle ? S.caseTitle(c) : c.Title, opisi('Prvostepena') || is.Prvostepenapresuda || is.sankcija || DASH, opisi('Pravosnažna') || is.Pravosna_x017e_napresuda || DASH, dur.length ? `${fmtNum(sum(dur), 0)} dana` : DASH]; });
     out.push(RT('Pregled preinačenih presuda u predmetima u kojima je pritvor određen nakon izricanja presude', ['Predmet', 'Kazna u prvostepenoj presudi', 'Kazna u preinačenoj presudi', 'Trajanje pritvora'], r26,
       'Kazne se preuzimaju iz koraka „Ishod postupka”.'));
     out.push(courtRows('Prosječno trajanje postupka u analiziranim predmetima (u danima), od dana podizanja optužnog akta do dana pravosnažnosti presude', cs,
@@ -1219,7 +1230,8 @@
     const TZ = (title, cols) => courtRows(title, zs, [NZ, ...cols], ZI, { full: true });
     const NO = ['Br. optuženih u predmetima u koje su monitori vršili uvid', x => x.length], OI = 'Predmet sa više optuženih broji se jednom za svakog optuženog.';
     const TO = (title, cols, info) => courtRows(title, O, cols, info ? `${info} ${OI}` : OI, { full: true });
-    const zat = c => /^Kazna zatvora/.test(c.glavnaSankcija || ''), kuc = c => /prostorijama za stanovanje/.test(c.glavnaSankcija || ''), uo = c => /^Uslovna osuda/.test(c.glavnaSankcija || '');
+    const zat = c => /^Kazna (zatvora|dugotrajnog zatvora)/.test(c.glavnaSankcija || ''), kuc = c => /prostorijama za stanovanje/.test(c.glavnaSankcija || ''), uo = c => /^Uslovna osuda/.test(c.glavnaSankcija || '');
+    const dug = c => /^Kazna dugotrajnog zatvora/.test(c.glavnaSankcija || '');
     const kat = k => c => zat(c) && zatvorKat(c) === k;
     const out = [
       T('Broj predmeta nasilja nad ženama u koje su monitori vršili uvid', [N]),
@@ -1236,7 +1248,8 @@
     const withSan = O.filter(c => c.glavnaSankcija);
     const r10 = [...by(withSan, c => c.glavnaSankcija).entries()].sort((a, b) => b[1].length - a[1].length).map(([k, v]) => [k, v.length, pctR(v.length, withSan.length)]);
     out.push(RT('Izrečene sankcije po vrsti', ['Presuda', 'Broj izrečenih kazni', 'Procenat'], withSan.length ? [...r10, ['UKUPNO', withSan.length, '100%']] : []));
-    out.push(TO('Kazne zatvora i kazne zatvora koje se izvršavaju u prostorijama za stanovanje', [...P2('Kazna zatvora', c => zat(c) && !kuc(c)), ...P2('Kazna zatvora u prostorijama za stanovanje', kuc), ...P2('Ukupno', zat)],
+    out.push(TO('Kazne zatvora, kazne dugotrajnog zatvora i kazne zatvora koje se izvršavaju u prostorijama za stanovanje', [...P2('Kazna zatvora', c => zat(c) && !kuc(c) && !dug(c)),
+      ...P2('Kazna dugotrajnog zatvora', dug), ...P2('Kazna zatvora u prostorijama za stanovanje', kuc), ...P2('Ukupno', zat)],
       'Procenat je u odnosu na broj optuženih u predmetima u koje je izvršen uvid u tom sudu.'));
     const katInfo = 'Kategorija se računa iz upisanog trajanja kazne (godine, mjeseci, dani) i obuhvata i kazne zatvora koje se izvršavaju u prostorijama za stanovanje. Procenat je u odnosu na broj optuženih u tom sudu.';
     for (const [lbl, k] of [['do šest mjeseci', 'Do 6 mjeseci'], ['od šest mjeseci do jedne godine', 'Od 6 mjeseci do 1 godine'], ['dužem od jedne godine', 'Preko 1 godine']]) {
@@ -1251,9 +1264,63 @@
     const kd = krivicnaDjela(cs)[0];
     out.push(RT('Krivična djela u analiziranim predmetima', ['Krivično djelo', 'Broj predmeta', 'Procenat'], kd.rows.map(r => [r[0], r[1], pctR(r[1], cs.length)]),
       'Predmet u kojem se sudi za više krivičnih djela broji se kod svakog djela, pa zbir može biti veći od broja predmeta. Procenat je u odnosu na broj analiziranih predmeta.'));
+    out.push(...vawNoveTabele(O));
     return out;
   }
-  const REPORTS = { okk: okkReport, svi: sviReport, vaw: vawReport };
+  function vawNoveTabele(O) {
+    const out = [], tip = c => S.sankTip(c);
+    const MB = O.filter(c => mbOf(c).length), mjere = [...S.MJERE_BEZBJEDNOSTI, ...distinct(MB.flatMap(mbOf)).filter(m => !S.MJERE_BEZBJEDNOSTI.includes(m))];
+    const mbRows = mjere.map(m => { const g = MB.filter(c => tip(c) === 'mb' && mbOf(c).includes(m)).length, u = MB.filter(c => tip(c) !== 'mb' && mbOf(c).includes(m)).length;
+      return [m, g, u, g + u, pctR(g + u, O.length)]; }).filter(r => r[3]).sort((a, b) => b[3] - a[3]);
+    const mbG = MB.filter(c => tip(c) === 'mb').length;
+    out.push(RT('Izrečene mjere bezbjednosti po vrsti', ['Mjera bezbjednosti', 'Kao glavna sankcija', 'Uz drugu sankciju', 'Ukupno', 'Procenat optuženih'],
+      mbRows.length ? [...mbRows, ['UKUPNO optuženih sa mjerom bezbjednosti', mbG, MB.length - mbG, MB.length, pctR(MB.length, O.length)]] : [],
+      'Optuženi kome je izrečeno više mjera broji se kod svake mjere, a u redu UKUPNO jednom. Procenat je u odnosu na broj svih optuženih.'));
+    const U = O.filter(c => tip(c) === 'uo'), Z = O.filter(c => tip(c) === 'zn'), uRed = (l, xs) => [l, xs.length, avgTerm(xs.map(uoMj)), avgTerm(xs.map(provMj))];
+    out.push(RT('Uslovne osude – utvrđena kazna i vrijeme provjeravanja', ['Vrsta', 'Broj', 'Prosječna utvrđena kazna', 'Prosječno vrijeme provjeravanja'],
+      U.length + Z.length ? [uRed('Uslovna osuda', U), uRed('Uslovna osuda sa zaštitnim nadzorom', Z), uRed('UKUPNO', [...U, ...Z])] : []));
+    const zn = c => Array.isArray(c.zastitniNadzor) ? c.zastitniNadzor : [];
+    const zRows = [...S.ZASTITNI_NADZOR, ...distinct(Z.flatMap(zn)).filter(x => !S.ZASTITNI_NADZOR.includes(x))].map(o => [o, Z.filter(c => zn(c).includes(o)).length]).filter(r => r[1])
+      .map(r => [...r, pctR(r[1], Z.length)]);
+    out.push(RT('Obaveze u okviru zaštitnog nadzora', ['Obaveza (čl. 61 KZ)', 'Broj', 'Procenat'], zRows, 'Procenat je u odnosu na broj uslovnih osuda sa zaštitnim nadzorom.'));
+    const st4 = (l, xs, f, fmt) => { const v = vals(xs.map(f).map(x => x === null || x === undefined || x === '' ? null : Number(x)));
+      return [l, xs.length, v.length ? fmt(sum(v) / v.length) : DASH, v.length ? fmt(Math.min(...v)) : DASH, v.length ? fmt(Math.max(...v)) : DASH]; };
+    const NK = O.filter(c => tip(c) === 'novcana'), RJ = O.filter(c => tip(c) === 'rad');
+    out.push(RT('Novčane kazne i rad u javnom interesu', ['Sankcija', 'Broj', 'Prosjek', 'Najmanje', 'Najviše'],
+      [NK.length ? st4('Novčana kazna (€)', NK, c => c.novcanaIznos, x => fmtNum(x, 0) + ' €') : null, RJ.length ? st4('Rad u javnom interesu (časova)', RJ, c => c.radCasova, x => fmtNum(x, 0)) : null].filter(Boolean)));
+    return out;
+  }
+  // sankcije iz ishoda postupka (svi i okk), svaki optuzeni poseban red
+  function sankRows(D) {
+    const ids = new Set(D.predmeti.map(c => c._id));
+    return (D.ishod || []).filter(is => ids.has(is.Predmet)).flatMap(is => (Array.isArray(is.osudjeni) ? is.osudjeni : []).filter(o => o.glavnaSankcija)
+      .map(o => ({ ...o, Predmet: is.Predmet, prav: is.vrstaPresude === 'Pravosnažna' })));
+  }
+  function sankTabele(D) {
+    const R0 = sankRows(D); if (!R0.length) return [];
+    const out = [], P1 = R0.filter(r => !r.prav), P2 = R0.filter(r => r.prav), tip = c => S.sankTip(c);
+    const INFO = 'Svaki optuženi se broji posebno. Unosi bez oznake vrste presude računaju se kao prvostepeni.';
+    const vrste = distinct(R0.map(r => r.glavnaSankcija)).sort((a, b) => sankRed(a) - sankRed(b) || a.localeCompare(b, 'sr'));
+    const dva = (lbl, f) => { const a = P1.filter(f).length, b = P2.filter(f).length; return [lbl, a, pctR(a, P1.length), b, pctR(b, P2.length)]; };
+    const KOL = ['Prvostepene presude', 'Procenat', 'Pravosnažne presude', 'Procenat'];
+    out.push(RT('Izrečene sankcije po vrsti', ['Sankcija', ...KOL], [...vrste.map(v => dva(v, r => r.glavnaSankcija === v)), dva('UKUPNO', () => true)], INFO));
+    const Zt = R0.filter(zatvorTip), z1 = P1.filter(zatvorTip).length, z2 = P2.filter(zatvorTip).length;
+    const zr = c => [c, P1.filter(r => zatvorTip(r) && kat4(r) === c).length, P2.filter(r => zatvorTip(r) && kat4(r) === c).length];
+    const zRows = [...KAT4.map(zr), ['Trajanje nije upisano', P1.filter(r => zatvorTip(r) && kat4(r) === null).length, P2.filter(r => zatvorTip(r) && kat4(r) === null).length]]
+      .filter((r, i) => i < KAT4.length || r[1] + r[2]).map(([l, a, b]) => [l, a, pctR(a, z1), b, pctR(b, z2)]);
+    out.push(RT('Kazne zatvora po trajanju', ['Trajanje', ...KOL], Zt.length ? [...zRows, ['UKUPNO', z1, z1 ? '100%' : DASH, z2, z2 ? '100%' : DASH]] : [],
+      'Obuhvata kaznu zatvora, dugotrajni zatvor i zatvor u prostorijama za stanovanje. ' + INFO));
+    const konacne = [...by(R0, r => r.Predmet).values()].flatMap(xs => xs.some(r => r.prav) ? xs.filter(r => r.prav) : xs);
+    const U = konacne.filter(c => tip(c) === 'uo'), Z = konacne.filter(c => tip(c) === 'zn'), uRed = (l, xs) => [l, xs.length, avgTerm(xs.map(uoMj)), avgTerm(xs.map(provMj))];
+    out.push(RT('Uslovne osude', ['Vrsta', 'Broj', 'Prosječna utvrđena kazna', 'Prosječno vrijeme provjeravanja'], U.length + Z.length ? [uRed('Uslovna osuda', U), uRed('Uslovna osuda sa zaštitnim nadzorom', Z)] : [],
+      'Prema pravosnažnim presudama; ako pravosnažna nije upisana, uzima se prvostepena.'));
+    const mjere = [...S.MJERE_BEZBJEDNOSTI, ...distinct(R0.flatMap(mbOf)).filter(m => !S.MJERE_BEZBJEDNOSTI.includes(m))];
+    const mRows = mjere.map(m => [m, P1.filter(r => mbOf(r).includes(m)).length, P2.filter(r => mbOf(r).includes(m)).length]).filter(r => r[1] + r[2]).sort((a, b) => b[1] + b[2] - a[1] - a[2]);
+    out.push(RT('Izrečene mjere bezbjednosti po vrsti', ['Mjera bezbjednosti', 'Prvostepene presude', 'Pravosnažne presude'], mRows,
+      'Obuhvata mjere izrečene kao glavna sankcija i uz drugu sankciju. Optuženi kome je izrečeno više mjera broji se kod svake mjere.'));
+    return out;
+  }
+  const REPORTS = { okk: D => [...okkReport(D), ...sankTabele(D)], svi: D => [...sviReport(D), ...sankTabele(D)], vaw: vawReport };
   function report(moduleKey, data, per) {
     if (!REPORTS[moduleKey]) return [];
     const D = reportData(data, moduleKey === 'vaw' ? null : per);
@@ -1303,8 +1370,29 @@
     rocista: [{ key: 'odsutni', label: 'Odsutna lica (razlozi odlaganja)', type: 'multichoice', fn: h => S.rocRazlozi(h).odsutni.map(x => x.ucesnik) },
       { key: 'ostaliRazlozi', label: 'Ostali razlozi odlaganja', type: 'multichoice', fn: h => S.rocRazlozi(h).ostali }],
   };
-  const SKIP_TYPES = new Set(['lookup', 'json', 'razlozi', 'mjereunosi', 'zrtve', 'optuzeni', 'sankcije']);
+  const SKIP_TYPES = new Set(['lookup', 'json', 'razlozi', 'mjereunosi', 'zrtve', 'optuzeni', 'sankcije', 'osudjeni']);
+  // sankcije optuzenih iz ishoda postupka kao posebna jedinica brojanja
+  const OSUDJENI = '#osudjeni';
+  const isOsudjeni = k => typeof k === 'string' && k.endsWith(OSUDJENI) && !!S.LIST_BY_KEY[k.slice(0, -OSUDJENI.length)];
+  const unitOk = k => !!S.LIST_BY_KEY[k] || isOsudjeni(k);
+  const SANK_POLJA_T = () => [
+    { id: 'f:vrstaPresude', label: 'Vrsta presude', type: 'choice', choices: ['Prvostepena', 'Pravosnažna'] },
+    { id: 'f:oznaka', label: 'Optuženi (ime ili oznaka)', type: 'text' },
+    { id: 'f:glavnaSankcija', label: 'Glavna sankcija', type: 'choice', choices: S.SANKCIJE },
+    { id: 'd:zatvorMj', label: 'Trajanje kazne zatvora (mjeseci)', type: 'number', fn: r => zatvorTip(r) ? zatvorMj(r) : null },
+    { id: 'd:zatvorKat', label: 'Kategorija kazne zatvora', type: 'choice', choices: KAT4, fn: r => zatvorTip(r) ? kat4(r) : null },
+    { id: 'f:novcanaIznos', label: 'Iznos novčane kazne (€)', type: 'number' },
+    { id: 'f:radCasova', label: 'Broj časova rada u javnom interesu', type: 'number' },
+    { id: 'd:uoMj', label: 'Utvrđena kazna kod uslovne osude (mjeseci)', type: 'number', fn: r => /^(uo|zn)$/.test(S.sankTip(r) || '') ? uoMj(r) : null },
+    { id: 'd:provMj', label: 'Vrijeme provjeravanja (mjeseci)', type: 'number', fn: r => /^(uo|zn)$/.test(S.sankTip(r) || '') ? provMj(r) : null },
+    { id: 'f:zastitniNadzor', label: 'Sadržina zaštitnog nadzora', type: 'multichoice', choices: S.ZASTITNI_NADZOR },
+    { id: 'd:mjereBezbjednosti', label: 'Mjere bezbjednosti', type: 'multichoice', choices: S.MJERE_BEZBJEDNOSTI, fn: r => mbOf(r) },
+  ].map(f => ({ ...f, name: f.id.slice(2), group: 'Sankcija optuženog' }));
   function fieldCatalog(unitKey) {
+    if (isOsudjeni(unitKey)) { const l = S.LIST_BY_KEY[unitKey.slice(0, -OSUDJENI.length)], own = F => F.filter(f => f.name && !SKIP_TYPES.has(f.type) && !f.hidden && f.type !== 'djela');
+      const cF = S.fieldsOf(l.caseList), typ = f => f.type === 'caseno' || f.type === 'longtext' ? 'text' : f.type;
+      return [...SANK_POLJA_T().map(({ fn, ...f }) => f), ...own(cF).map(f => ({ id: 'c:' + f.name, name: f.name, label: f.label, type: typ(f), long: f.type === 'longtext', list: l.caseList, group: 'Predmet' })),
+        ...(DERIVED[S.baseKey(l.caseList)] || []).filter(d => !d.when || d.when(cF)).map(d => ({ id: 'cd:' + d.key, label: d.label, type: d.type, choices: d.choices, group: 'Izračunato' }))]; }
     const l = S.LIST_BY_KEY[unitKey]; if (!l) return [];
     const own = F => F.filter(f => f.name && !SKIP_TYPES.has(f.type) && (!f.hidden || f.custom) && f.type !== 'djela');
     const typ = f => f.type === 'caseno' ? 'text' : f.type === 'longtext' ? 'text' : f.type;
@@ -1324,16 +1412,19 @@
     min: 'Najmanja vrijednost polja', max: 'Najveća vrijednost polja', dur_avg: 'Prosječno trajanje između dva datuma (dana)', dur_sum: 'Ukupno trajanje između dva datuma (dana)' };
   const blankV = v => v === null || v === undefined || v === '' || (Array.isArray(v) && !v.length);
   function makeGetter(unitKey, data) {
-    const l = S.LIST_BY_KEY[unitKey], src = /_roc$/.test(l.space) ? (data.roc || {}) : data;
+    const osu = isOsudjeni(unitKey), lk = osu ? unitKey.slice(0, -OSUDJENI.length) : unitKey;
+    const l = S.LIST_BY_KEY[lk], src = /_roc$/.test(l.space) ? (data.roc || {}) : data;
     const caseRecs = src[S.baseKey(l.caseList)] || [], caseById = new Map(caseRecs.map(c => [c._id, c]));
-    const recs = l.isCase ? caseRecs : (src[S.baseKey(unitKey)] || []);
+    const recs = osu ? (src[S.baseKey(lk)] || []).flatMap(is => (Array.isArray(is.osudjeni) ? is.osudjeni : []).map((o, i) => ({ ...o, _id: `${is._id}#${i}`, Predmet: is.Predmet, vrstaPresude: is.vrstaPresude || null })))
+      : l.isCase ? caseRecs : (src[S.baseKey(unitKey)] || []);
+    const sd = osu ? new Map(SANK_POLJA_T().filter(f => f.fn).map(f => [f.name, f.fn])) : null;
     const p1 = new Map(); for (const p of data.presuda1 || []) if (!p1.has(p.Predmet)) p1.set(p.Predmet, p);
     const ctx = { pres1: c => c ? (p1.get(c._id) || {}).Datumobjavljivanjapresude : null };
     const caseOf = r => l.isCase ? r : caseById.get(r.Predmet) || null;
     const der = (k, key) => (DERIVED[S.baseKey(k)] || []).find(d => d.key === key);
     const get = (r, id) => { if (!id) return null; const i = id.indexOf(':'), k = id.slice(0, i), n = id.slice(i + 1);
       if (k === 'f') return r[n]; if (k === 'c') return (caseOf(r) || {})[n];
-      if (k === 'd') { const d = der(unitKey, n); return d ? d.fn(r, caseOf(r), ctx) : null; }
+      if (k === 'd') { if (sd) return sd.has(n) ? sd.get(n)(r) : null; const d = der(unitKey, n); return d ? d.fn(r, caseOf(r), ctx) : null; }
       if (k === 'cd') { const c = caseOf(r), d = der(l.caseList, n); return c && d ? d.fn(c, c, ctx) : null; } return null; };
     return { recs, get, caseOf };
   }
@@ -1354,7 +1445,7 @@
   function customTable(def, data, choicesOf) {
     data = prep(data);
     const empty = (cols, info) => ({ title: def.title || 'Nova tabela', columns: cols, rows: [], info, empty: true });
-    if (!def.unit || !S.LIST_BY_KEY[def.unit]) return empty(['—'], 'Izaberite šta se broji.');
+    if (!def.unit || !unitOk(def.unit)) return empty(['—'], 'Izaberite šta se broji.');
     const cat = fieldCatalog(def.unit), meta = id => cat.find(c => c.id === id);
     const { recs, get, caseOf } = makeGetter(def.unit, data);
     const base = recs.filter(r => (def.filters || []).every(f => matches(get, r, f)));
@@ -1424,6 +1515,6 @@
     let n = 0; return sorted.map(t => ({ ...t, no: t.hidden ? null : ++n }));
   }
 
-  const api = { TOPICS, MODULE_TOPICS, SPACE_TOPICS, compute, report, reportTables, customTable, fieldCatalog, FILTER_OPS, AGGS };
+  const api = { TOPICS, MODULE_TOPICS, SPACE_TOPICS, compute, report, reportTables, customTable, fieldCatalog, FILTER_OPS, AGGS, OSUDJENI };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Stats = api;
 })(typeof self !== 'undefined' ? self : this);

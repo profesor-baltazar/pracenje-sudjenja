@@ -478,7 +478,7 @@ if (fs.existsSync(AS[0])) test('AppSheet uvoz: brojevi se poklapaju sa izvješta
     assert.strictEqual(T(1, 'SVI SUDOVI')[1], 466, 'Tabela 1'); assert.deepStrictEqual(T(12, 'UKUPNO').slice(1, 3), [521, '100%'], 'Tabela 12: 521 odloženo ročište');
     assert.deepStrictEqual(T(12, 'Odsustvo optuženog').slice(1, 3), [170, '32,63%']); assert.deepStrictEqual(T(13, 'SVI SUDOVI').slice(1), [47, 101], 'Tabela 13');
     assert.deepStrictEqual(T(31, 'UKUPNO').slice(1, 3), [83, 66], 'Tabela 31');
-    const vr = ST.report('vaw', pack('vaw_'), {}); assert.strictEqual(vr.length, 18);
+    const vr = ST.report('vaw', pack('vaw_'), {}); assert.strictEqual(vr.length, 22);
     assert.deepStrictEqual(vr[9].rows.find(r => r[0] === 'Kazna zatvora'), ['Kazna zatvora', 78, '50,32%'], 'Nasilje, Tabela 10'); }
   const z = ST.compute('zalba', svi, null, 'svi')[0];
   assert.strictEqual(z.rows.find(r => r[0] === 'Broj odbijenih žalbi')[1], 106);
@@ -695,6 +695,41 @@ test('forme administratora: nacrt, novi modul i polja, objava monitorima', async
   assert.strictEqual(adm.store.byId(p0.id).fields.c_ocjena, 'Dobro'); assert(S.fieldsOf('predmeti').find(f => f.name === 'c_ocjena').hidden);
   await adm.sync.saveFormsDraft(null); await adm.sync.publishForms(); await runA();
 });
+test('sankcije: opis, tabele za izvještaj i graditelj', () => {
+  assert.strictEqual(S.sankcijaOpis({ glavnaSankcija: 'Kazna zatvora', zatvorGodina: 1, zatvorMjeseci: 6, uzMjeru: true, mjereBezbjednosti: ['Oduzimanje predmeta'] }),
+    'Kazna zatvora, 1 god. 6 mj.; mjera bezbjednosti: oduzimanje predmeta');
+  assert.strictEqual(S.sankTip({ glavnaSankcija: 'Uslovna osuda sa zaštitnim nadzorom' }), 'zn');
+  const pred = [{ _id: 'a', Title: 'K 1/24', sud: 'Osnovni sud u Podgorici' }, { _id: 'b', Title: 'K 2/24', sud: 'Osnovni sud u Baru' }];
+  const ishod = [
+    { _id: 'i1', Predmet: 'a', vrstaPresude: 'Prvostepena', osudjeni: [{ glavnaSankcija: 'Kazna zatvora', zatvorGodina: 2 }, { glavnaSankcija: 'Uslovna osuda', uoMjeseci: 6, provjeraGodina: 1, uzMjeru: true, mjereBezbjednosti: ['Oduzimanje predmeta'] }] },
+    { _id: 'i2', Predmet: 'a', vrstaPresude: 'Pravosnažna', osudjeni: [{ glavnaSankcija: 'Kazna zatvora', zatvorMjeseci: 10 }, { glavnaSankcija: 'Uslovna osuda', uoMjeseci: 4, provjeraGodina: 2 }] },
+    { _id: 'i3', Predmet: 'b', osudjeni: [{ glavnaSankcija: 'Mjera bezbjednosti', mjereBezbjednosti: ['Oduzimanje predmeta', 'Zabrana upravljanja motornim vozilom'] }] }];
+  const rep = ST.report('svi', { predmeti: pred, ishod });
+  const vrsta = rep.find(t => t.title === 'Izrečene sankcije po vrsti');
+  assert.deepStrictEqual(vrsta.rows.find(r => r[0] === 'Kazna zatvora'), ['Kazna zatvora', 1, '33,33%', 1, '50%']);
+  assert.deepStrictEqual(vrsta.rows[vrsta.rows.length - 1], ['UKUPNO', 3, '100%', 2, '100%']);
+  const traj = rep.find(t => t.title === 'Kazne zatvora po trajanju');
+  assert.deepStrictEqual(traj.rows.find(r => r[0] === 'Od 1 do 5 godina').slice(0, 2), ['Od 1 do 5 godina', 1]);
+  assert.deepStrictEqual(traj.rows.find(r => r[0] === 'Od 6 mjeseci do 1 godine').slice(3, 4), [1]);
+  const uo = rep.find(t => t.title === 'Uslovne osude');
+  assert.deepStrictEqual(uo.rows[0], ['Uslovna osuda', 1, '4 mj.', '2 god.'], 'uslovne osude iz pravosnažne presude');
+  const mb = rep.find(t => t.title === 'Izrečene mjere bezbjednosti po vrsti');
+  assert.deepStrictEqual(mb.rows[0], ['Oduzimanje predmeta', 2, 0]);
+  const vaw = ST.report('vaw', { predmeti: [{ _id: 'v', sud: 'Osnovni sud u Podgorici', optuzeni: [
+    { glavnaSankcija: 'Kazna dugotrajnog zatvora', zatvorGodina: 30 }, { glavnaSankcija: 'Novčana kazna', novcanaIznos: 500, uzMjeru: true, mjereBezbjednosti: ['Zabrana približavanja'] },
+    { glavnaSankcija: 'Novčana kazna', novcanaIznos: 1500 }, { glavnaSankcija: 'Uslovna osuda sa zaštitnim nadzorom', uoMjeseci: 8, provjeraGodina: 1, provjeraMjeseci: 6, zastitniNadzor: ['Liječenje u odgovarajućoj zdravstvenoj ustanovi'] }] }] });
+  assert.deepStrictEqual(vaw.find(t => t.title === 'Novčane kazne i rad u javnom interesu').rows, [['Novčana kazna (€)', 2, '1.000 €', '500 €', '1.500 €']]);
+  assert.deepStrictEqual(vaw.find(t => t.title === 'Izrečene mjere bezbjednosti po vrsti').rows[0], ['Zabrana približavanja', 0, 1, 1, '25%']);
+  assert.deepStrictEqual(vaw.find(t => t.title === 'Obaveze u okviru zaštitnog nadzora').rows, [['Liječenje u odgovarajućoj zdravstvenoj ustanovi', 1, '100%']]);
+  assert.deepStrictEqual(vaw.find(t => t.title === 'Uslovne osude – utvrđena kazna i vrijeme provjeravanja').rows[1], ['Uslovna osuda sa zaštitnim nadzorom', 1, '8 mj.', '1 god. 6 mj.']);
+  const zt = vaw.find(t => /^Kazne zatvora, kazne dugotrajnog/.test(t.title)); assert(zt.columns.includes('Kazna dugotrajnog zatvora – broj'));
+  const ct = ST.customTable({ unit: 'svi_ishod' + ST.OSUDJENI, filters: [{ field: 'f:vrstaPresude', op: 'eq', value: 'Prvostepena' }], rows: { field: 'f:glavnaSankcija' },
+    cols: [{ agg: 'count' }, { agg: 'cases' }] }, { predmeti: pred, ishod });
+  assert.deepStrictEqual(ct.rows, [['Kazna zatvora', 1, 1], ['Uslovna osuda', 1, 1], ['Ukupno', 2, 1]]);
+  const mbT = ST.customTable({ unit: 'svi_ishod' + ST.OSUDJENI, rows: { field: 'd:mjereBezbjednosti', total: false }, cols: [{ agg: 'count' }] }, { predmeti: pred, ishod });
+  assert.deepStrictEqual(mbT.rows.find(r => r[0] === 'Oduzimanje predmeta'), ['Oduzimanje predmeta', 2]);
+  assert(ST.fieldCatalog('ishod' + ST.OSUDJENI).some(f => f.id === 'c:Title'), 'polja predmeta u jedinici sankcija');
+});
 test('graditelj tabela: filteri, redovi, kolone, nazivi i redoslijed', () => {
   const d = { predmeti: [{ _id: 'a', sud: 'Osnovni sud Bar', Pritvorskipredmet: true }, { _id: 'b', sud: 'Viši sud Podgorica' }, { _id: 'c', sud: 'Osnovni sud Bar' }],
     odlaganja: [{ Predmet: 'a', Razlogodlaganja: '401 - Odsustvo sudije', Odlo_x017e_enood: '2024-01-01', Odlo_x017e_enodo: '2024-01-11' }, { Predmet: 'b', Razlogodlaganja: '101 - Neuredna dostava okrivljenom', Odlo_x017e_enood: '2024-01-01', Odlo_x017e_enodo: '2024-01-21' }],
@@ -710,7 +745,7 @@ test('graditelj tabela: filteri, redovi, kolone, nazivi i redoslijed', () => {
   assert.deepStrictEqual(cs.rows, [['Da', 1, '33,33%'], ['Ne', 2, '66,67%'], ['Ukupno', 3, '100%']]);
   const cfg = { titles: { 'vaw:1': { title: 'Uzorak' }, 'vaw:2': { hidden: true } }, custom: [{ id: 'x1', module: 'vaw', title: 'Moja', unit: 'vaw_predmeti', cols: [{ agg: 'count' }], ready: false }], order: { vaw: ['c:x1'] } };
   const mon = ST.reportTables('vaw', { predmeti: [] }, cfg, {}), adm = ST.reportTables('vaw', { predmeti: [] }, cfg, { admin: true, showHidden: true });
-  assert.strictEqual(mon[0].title, 'Uzorak'); assert(!mon.some(t => t.custom), 'monitor ne vidi tabelu u izradi'); assert.strictEqual(mon.length, 17, 'sakrivena tabela');
+  assert.strictEqual(mon[0].title, 'Uzorak'); assert(!mon.some(t => t.custom), 'monitor ne vidi tabelu u izradi'); assert.strictEqual(mon.length, 21, 'sakrivena tabela');
   assert.strictEqual(adm[0].key, 'c:x1'); assert.strictEqual(adm[0].no, 1); assert.strictEqual(adm.find(t => t.key === 's:2').no, null);
   cfg.custom[0].ready = true; assert.strictEqual(ST.reportTables('vaw', { predmeti: [] }, cfg, {})[0].title, 'Moja');
 });
