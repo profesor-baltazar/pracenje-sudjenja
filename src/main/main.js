@@ -139,12 +139,15 @@ function handlers() {
   // brise se samo cijeli predmet; monitor samo svoj
   ipcMain.handle('data:delete', (_e, { id }) => {
     const r = store.byId(id); if (!r) return true;
-    if (!(Schema.LIST_BY_KEY[r.list] && Schema.LIST_BY_KEY[r.list].isCase)) throw new Error('Briše se samo cijeli predmet; ostali unosi se mijenjaju.');
-    const children = store.allRecords().filter(x => x.fields.Predmet === id);
-    if (!state().isAdmin) {
-      const mine = x => x.owner ? x.owner === me().email : !x.remote;
-      if (!mine(r)) throw new Error('Možete obrisati samo predmet koji ste sami unijeli. Ovaj predmet može obrisati administrator.');
+    const l = Schema.LIST_BY_KEY[r.list];
+    if (!l || (!l.isCase && !l.many)) throw new Error('Ovaj unos se ne briše, već se mijenja.');
+    const mine = x => !!x && (x.owner ? x.owner === me().email : !x.remote);
+    if (!l.isCase) {
+      if (!state().isAdmin && !mine(r) && !mine(store.byId(r.fields.Predmet))) throw new Error('Unos može obrisati onaj ko ga je unio, autor predmeta ili administrator.');
+      store.markDeleted(id, me().email); store.flushNow(); scheduleSync(); return true;
     }
+    const children = store.allRecords().filter(x => x.fields.Predmet === id);
+    if (!state().isAdmin && !mine(r)) throw new Error('Možete obrisati samo predmet koji ste sami unijeli. Ovaj predmet može obrisati administrator.');
     store.batch(() => { for (const x of children) store.markDeleted(x.id, me().email); store.markDeleted(id, me().email); });
     store.flushNow(); scheduleSync();
     return true;

@@ -106,7 +106,9 @@ function stepsFor(c) {
     if (b === 'jemstva' && f.Predlo_x017e_enojemstvo !== true) na = 'U predmetu nije označeno da je predloženo jemstvo.';
     if (b === 'odlaganja' && !n) {
       const fl = stepList('faze'), fz = st.faza > 1 && fl && c ? (allChildRecs(fl.key, c.id).find(x => (x.fields.faza || 2) === st.faza) || { fields: {} }).fields : f;
-      if (!(Number(fz.Brojodlo_x017e_enihro_x010d_i_x0) > 0)) na = st.faza > 1 ? 'Za ovo ponovljeno suđenje nije upisan broj odloženih ročišta.' : 'U osnovnim podacima nije upisano nijedno odloženo ročište.';
+      const bo = fz.Brojodlo_x017e_enihro_x010d_i_x0, gdje = st.faza > 1 ? 'podacima o ponovljenom suđenju' : 'osnovnim podacima';
+      if (bo === null || bo === undefined || bo === '') na = `Prvo upišite ukupan broj odloženih ročišta u ${gdje}.`;
+      else if (!(Number(bo) > 0)) na = `U ${gdje} piše da nije bilo odloženih ročišta.`;
     }
     const none = !!(c && !n && NIJE_BILO[b] && (f.nijeBilo || {})[nijeKey(l.key)]);
     return { ...l, idx: i + 1, count: n, na: none ? null : na, none };
@@ -415,14 +417,15 @@ function viewCase() {
         h('span', { class: 'n' }, s.count || s.none ? '✓' : s.idx), s.title, s.count > 1 ? h('span', { class: 'badge' }, s.count) : s.none ? h('span', { class: 'badge' }, 'nije bilo') : null))),
       h('section', { class: 'card pane' },
         h('div', { class: 'pane-head' }, h('h2', {}, single ? cur.title : `${cur.idx}. ${cur.title}`), h('span', { class: 'grow' }),
-          cur.many && c && !(st.edit && !st.edit.id) ? h('button', { class: 'btn primary', onclick: async () => { if (st.edit && !(await leaveEdit())) return; st.edit = newEdit(st.step); if (S.baseKey(st.step) === 'rocista') { const prev = childRecs(st.step, st.caseId).map(x => x.fields.datumNarednog).filter(S.isDate).sort().pop(); if (prev) { st.edit.draft.datum = prev; st.edit.base = ''; st.edit.dirty = true; } } render(); } }, '+ Dodaj') : null),
+          cur.many && c && !(st.edit && !st.edit.id) ? h('button', { class: 'btn primary', disabled: !!odlBlok(cur.key), title: odlBlok(cur.key) || '', onclick: async () => { if (odlBlok(cur.key)) return; if (st.edit && !(await leaveEdit())) return; st.edit = newEdit(st.step); if (S.baseKey(st.step) === 'rocista') { const prev = childRecs(st.step, st.caseId).map(x => x.fields.datumNarednog).filter(S.isDate).sort().pop(); if (prev) { st.edit.draft.datum = prev; st.edit.base = ''; st.edit.dirty = true; } } render(); } }, '+ Dodaj') : null),
         st.edit && st.edit.preview ? h('div', { class: 'note' }, 'Pregled forme: predmet još nije sačuvan, pa se ovaj unos ne može sačuvati. Upisano služi samo da vidite kako forma radi i nestaje kad pređete na drugi korak.') : null,
         c && !cur.na && S.baseKey(cur.key) === 'odlaganja' ? (() => { const vc = validationCtx(), b = Number(vc.brojOdlozenih) || 0, n = childRecs(cur.key, c.id).length;
-          return b ? h('div', { class: 'note ' + (n === b ? 'ok' : 'warn') }, n === b ? `Uneseno je svih ${b} odloženih ročišta.` : `Uneseno ${n} od ${b} odloženih ročišta${n > b ? ' – više nego što piše u ' + (st.faza > 1 ? 'podacima o ponovljenom suđenju' : 'osnovnim podacima') : ''}.`,
+          if (b === null || b === undefined || b === '') return cur.na ? null : h('div', { class: 'note warn' }, odlBlok(cur.key), ' ', h('a', { onclick: () => stepTo(st.faza > 1 ? stepList('faze').key : caseList()) }, st.faza > 1 ? '← Podaci o ponovljenom suđenju' : '← Osnovni podaci'));
+          return b ? h('div', { class: 'note ' + (n === b ? 'ok' : 'warn') }, n === b ? `Uneseno je svih ${b} odloženih ročišta. Za novo odlaganje prvo povećajte broj u ${st.faza > 1 ? 'podacima o ponovljenom suđenju' : 'osnovnim podacima'}.` : `Uneseno ${n} od ${b} odloženih ročišta${n > b ? ' – više nego što piše u ' + (st.faza > 1 ? 'podacima o ponovljenom suđenju' : 'osnovnim podacima') : ''}.`,
             n !== b ? [' ', h('a', { onclick: () => stepTo(st.faza > 1 ? stepList('faze').key : caseList()) }, st.faza > 1 ? '← Podaci o ponovljenom suđenju' : '← Osnovni podaci')] : null) : null; })() : null,
         c && NIJE_BILO[S.baseKey(cur.key)] && !childRecs(cur.key, c.id).length && !st.edit ? h('label', { class: 'nijebilo' + (cur.none ? ' on' : '') },
           h('input', { type: 'checkbox', checked: !!cur.none, onchange: e => setNijeBilo(c, cur.key, e.target.checked) }), NIJE_BILO[S.baseKey(cur.key)] + (st.faza > 1 && S.isPhased(cur.key) ? ` (ponovljeno suđenje ${st.faza - 1})` : '')) : null,
-        cur.na && c ? h('div', { class: 'note warn' }, cur.na + ' Podatke i dalje možete unijeti ako je potrebno.',
+        cur.na && c ? h('div', { class: 'note warn' }, cur.na + (S.baseKey(cur.key) === 'odlaganja' ? '' : ' Podatke i dalje možete unijeti ako je potrebno.'),
           S.baseKey(cur.key) === 'odlaganja' ? [' ', h('a', { onclick: () => stepTo(st.faza > 1 ? stepList('faze').key : caseList()) }, st.faza > 1 ? '← Podaci o ponovljenom suđenju' : '← Osnovni podaci')] : null) : null,
         S.baseKey(cur.key) === 'odlaganja' && c && c.fields._razloziAS ? h('div', { class: 'note' }, 'Zbirni razlozi odlaganja iz AppSheeta: ',
           Object.entries(c.fields._razloziAS).map(([k, v]) => `${k.replace('ods:', 'odsustvo ').replace('neur:', 'neuredna dostava – ')}: ${v}`).join(' · '), '. Uračunati su u statistiku.') : null,
@@ -546,7 +549,7 @@ function viewForm() {
         h('input', { type: 'checkbox', checked: !!st.showAllFields, onchange: ev => { st.showAllFields = ev.target.checked; render(); } }), ' Prikaži sva polja') : null,
       showAll && nErr ? h('span', { class: 'small', style: 'color:var(--err)' }, `Ispravite ${nErr} polje(a) označeno crveno.`) : null,
       rec ? h('span', { class: 'recmeta' }, rec.createdBy ? `Unio/la ${rec.createdBy}` : '', rec.modifiedBy && rec.modifiedBy !== rec.createdBy ? ` · izmijenio/la ${rec.modifiedBy}` : '') : null,
-      rec && canDelete(rec) ? h('button', { class: 'btn danger', onclick: () => del(rec) }, 'Obriši predmet') : null));
+      rec && canDelete(rec) ? h('button', { class: 'btn danger', onclick: () => del(rec) }, S.LIST_BY_KEY[rec.list].isCase ? 'Obriši predmet' : 'Obriši unos') : null));
 }
 function setDjela(name, list) {
   const e = st.edit; e.draft.krivicnoDjelo = [...new Set(list.map(x => (S.kzClan(x.clan) || {}).naziv).filter(Boolean))].join('; ') || (list.length ? null : e.draft.krivicnoDjelo);
@@ -652,7 +655,7 @@ function input(f, list, d) {
       return h('div', { class: 'djela' },
         list0.map((x, i) => h('div', { class: 'djelo' },
           h('div', { class: 'djelo-row' }, h('div', { class: 'naziv' }, G.naslov(x, i)),
-            G.dodaj && list0.length > 1 ? h('button', { class: 'btn ghost small', title: 'Ukloni', onclick: () => put(list0.filter((_, j) => j !== i)) }, '✕') : null),
+            G.dodaj && (list0.length > 1 || saved.length) ? h('button', { class: 'btn ghost small', title: 'Ukloni', onclick: () => put(list0.filter((_, j) => j !== i)) }, '✕') : null),
           h('div', { class: 'grupa-polja' }, G.polja.map(p => unos(x, i, p))))),
         G.dodaj ? h('button', { class: 'btn', onclick: () => put([...list0, { ...G.prazno }]) }, G.dodaj) : null);
     }
@@ -768,6 +771,7 @@ async function save() {
   const v = S.validate(e.list, e.draft, validationCtx());
   if (dupOf(e.list, e.draft, e.id)) v.errors.Title = 'dup';
   if (Object.keys(v.errors).length) { render(); toast('Forma ima greške – pogledajte polja označena crveno.', 'err'); return; }
+  if (!e.id && odlBlok(e.list)) { toast(odlBlok(e.list), 'err'); return; }
   const out = { ...e.draft };
   for (const f of S.fieldsOf(e.list)) if (f.show && !f.show(out)) out[f.name] = f.type === 'bool' ? false : f.type === 'multichoice' ? [] : null;
   try {
@@ -789,10 +793,21 @@ async function cancelEdit() {
 function startStepIfSingle() { if (!S.LIST_BY_KEY[st.step].many) startStep(); }
 const isMine = r => r.owner ? r.owner === st.app.me.email : !r.remote;
 // admin brise sve, monitor samo predmet koji je sam unio
+// predmet brise admin ili autor; unos u koraku sa vise unosa jos i autor predmeta
 function canDelete(rec) {
-  if (!S.LIST_BY_KEY[rec.list].isCase) return false;
-  if (st.app.isAdmin) return true;
-  return isMine(rec);
+  const l = S.LIST_BY_KEY[rec.list];
+  if (!l.isCase && !l.many) return false;
+  if (st.app.isAdmin || isMine(rec)) return true;
+  const c = !l.isCase && caseOfRec(rec);
+  return !!c && isMine(c);
+}
+// novo odlaganje tek kad je upisan ukupan broj, i ne vise od tog broja
+function odlBlok(list) {
+  if (S.baseKey(list) !== 'odlaganja' || !st.caseId) return null;
+  const b = validationCtx().brojOdlozenih, n = childRecs(list, st.caseId).length, gdje = st.faza > 1 ? 'podacima o ponovljenom suđenju' : 'osnovnim podacima';
+  if (b === null || b === undefined || b === '') return `Prvo upišite ukupan broj odloženih ročišta u ${gdje}.`;
+  if (n >= Number(b)) return Number(b) ? `Uneseno je svih ${b} odloženih ročišta. Za novo odlaganje prvo povećajte broj u ${gdje}.` : `U ${gdje} piše da nije bilo odloženih ročišta.`;
+  return null;
 }
 async function del(rec) {
   const isCase = S.LIST_BY_KEY[rec.list].isCase;
