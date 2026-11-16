@@ -733,6 +733,16 @@ test('tabela 9: odnos po kategorijama iz izvještaja', () => {
   assert.deepStrictEqual(t.rows[0], ['Supruga', 2, 1, '50%', 1, '50%']);
   assert(/Nije svrstano: Xyz/.test(t.info));
 });
+test('nema podataka o prijavljivanju i pridruživanju; oznaka za provjeru', () => {
+  const rt = ST.report('vaw', { predmeti: [{ _id: 'a', sud: 'Osnovni sud u Podgorici', zrtve: [{ odnos: 'Supruga', prijavljivala: true, pridruzila: 'np' }, { odnos: 'Majka', prijavljivala: 'np', pridruzila: false }, { odnos: 'Sestra' }] }] });
+  assert.deepStrictEqual(rt[1].rows.slice(-1)[0], ['SVI SUDOVI', 3, 1, '33,33%', 1, '33,33%', 1, '33,33%']);
+  assert.deepStrictEqual(rt[4].rows.slice(-1)[0], ['SVI SUDOVI', 3, 0, '0%', 1, '33,33%'], 'nema podataka nije isto što i ne');
+  const t9 = rt.find(x => x.title === 'Odnos oštećenih i okrivljenih');
+  assert(t9.columns.includes('Nema podataka o prijavljivanju') && t9.columns.includes('Nema podataka o pridruživanju'));
+  assert.deepStrictEqual(t9.rows.slice(-1)[0], ['UKUPNO', 3, 1, '33,33%', 1, 0, '0%', 1]);
+  for (const l of ['svi_predmeti', 'predmeti', 'vaw_predmeti', 'svir_predmeti']) if (S.LIST_BY_KEY[l]) assert(S.fieldsOf(l).some(f => f.name === 'provjera' && f.hidden), l);
+  assert(!S.fieldsOf('svi_odlaganja').some(f => f.name === 'provjera'));
+});
 test('sankcije: opis, tabele za izvještaj i graditelj', () => {
   assert.strictEqual(S.sankcijaOpis({ glavnaSankcija: 'Kazna zatvora', zatvorGodina: 1, zatvorMjeseci: 6, uzMjeru: true, mjereBezbjednosti: ['Oduzimanje predmeta'] }),
     'Kazna zatvora, 1 god. 6 mj.; mjera bezbjednosti: oduzimanje predmeta');

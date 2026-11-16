@@ -837,14 +837,16 @@
     const OST = 'Ostali odnosi', NIJE = 'Odnos nije upisan';
     const kat = c => blank(c.odnos) ? NIJE : S.odnosKategorija(c.odnos) || OST;
     const g = by(cs, kat);
+    const npA = cs.some(c => c.prijavljivala === 'np'), npB = cs.some(c => c.pridruzila === 'np');
     const row = (k, v) => { const a = v.filter(c => c.prijavljivala === true).length, b = v.filter(c => c.pridruzila === true).length;
-      return [k, v.length, a, pctR(a, v.length), b, pctR(b, v.length)]; };
+      return [k, v.length, a, pctR(a, v.length), ...(npA ? [v.filter(c => c.prijavljivala === 'np').length] : []), b, pctR(b, v.length), ...(npB ? [v.filter(c => c.pridruzila === 'np').length] : [])]; };
     // grupe sa zbirom; prikazuju se samo kategorije koje imaju oštećenih
     const rows = S.ODNOS_GRUPE.flatMap(([naziv, kat]) => { const ks = kat.filter(k => g.has(k)); if (!ks.length) return [];
       return [...ks.map(k => row(k, g.get(k))), row(naziv + ' – ukupno', ks.flatMap(k => g.get(k)))]; });
     for (const k of [OST, NIJE]) if (g.has(k)) rows.push(row(k, g.get(k)));
     const ost = (g.get(OST) || []).map(c => c.odnos.trim());
-    return table('Odnos oštećenih i okrivljenih', ['Odnos oštećenih i okrivljenih', 'Broj oštećenih', 'Ranije prijavljivale nasilje', 'Procenat', 'Pridružile se krivičnom gonjenju', 'Procenat'],
+    return table('Odnos oštećenih i okrivljenih', ['Odnos oštećenih i okrivljenih', 'Broj oštećenih', 'Ranije prijavljivale nasilje', 'Procenat', ...(npA ? ['Nema podataka o prijavljivanju'] : []),
+      'Pridružile se krivičnom gonjenju', 'Procenat', ...(npB ? ['Nema podataka o pridruživanju'] : [])],
       cs.length ? [...rows, row('UKUPNO', cs)] : [],
       'Odnosi upisani drugačije svrstani su u kategorije: otac → ćerka, sin → majka, brat → sestra, očuh → pastorka, ostali srodnici → rođaci.' +
         (ost.length ? ` Nije svrstano: ${[...new Set(ost)].join(', ')}.` : ''));
@@ -872,7 +874,7 @@
   function vawTopics() {
     const B = (lbl, f) => [[`Broj predmeta u kojima ${lbl}`, cs => cnt(cs, f)], [`Procenat predmeta u kojima ${lbl}`, cs => pctN(cnt(cs, f), cs.length)]];
     const Z = (lbl, f) => [[`Broj oštećenih koje ${lbl}`, zs => cnt(zs, f)], [`Procenat oštećenih koje ${lbl}`, zs => pctN(cnt(zs, f), zs.length)]];
-    const pr = c => c.prijavljivala === true, pd = c => c.pridruzila === true, os = c => c.osudjivan === true, is = c => c.istovrsna === true, ol = c => c.olaksavajucaNepridruzivanje === true;
+    const pr = c => c.prijavljivala === true, pd = c => c.pridruzila === true, prNe = c => !pr(c) && c.prijavljivala !== 'np', pdNe = c => !pd(c) && c.pridruzila !== 'np', os = c => c.osudjivan === true, is = c => c.istovrsna === true, ol = c => c.olaksavajucaNepridruzivanje === true;
     return [{ key: 'vaw', title: 'Nasilje nad ženama', fn: d => {
       const cs = vawCases(d.predmeti), zs = zrtveOf(d, cs), os1 = optRows(cs);
       return [courtTable('Predmeti nasilja nad ženama', cs, [
@@ -883,12 +885,14 @@
         ...B('je kao olakšavajuća okolnost uzeto nepridruživanje oštećene, a optuženi je prethodno osuđivan za istovrsna djela', c => ol(c) && is(c)),
       ], null), courtTable('Oštećene', zs, [
         ['Broj oštećenih', x => x.length],
-        ...Z('su prethodno prijavljivale nasilje', pr), ...Z('prethodno nisu prijavljivale nasilje', c => !pr(c)),
-        ...Z('su se pridružile krivičnom gonjenju', pd), ...Z('se nisu pridružile krivičnom gonjenju', c => !pd(c)),
+        ...Z('su prethodno prijavljivale nasilje', pr), ...Z('prethodno nisu prijavljivale nasilje', prNe),
+        ...(zs.some(c => c.prijavljivala === 'np') ? Z('za koje nema podataka o prethodnom prijavljivanju nasilja', c => c.prijavljivala === 'np') : []),
+        ...Z('su se pridružile krivičnom gonjenju', pd), ...Z('se nisu pridružile krivičnom gonjenju', pdNe),
+        ...(zs.some(c => c.pridruzila === 'np') ? Z('za koje nema podataka o pridruživanju krivičnom gonjenju', c => c.pridruzila === 'np') : []),
         ...Z('su prethodno prijavljivale nasilje i pridružile se krivičnom gonjenju', c => pr(c) && pd(c)),
-        ...Z('su prethodno prijavljivale nasilje, a nisu se pridružile krivičnom gonjenju', c => pr(c) && !pd(c)),
-        ...Z('prethodno nisu prijavljivale nasilje, a pridružile su se krivičnom gonjenju', c => !pr(c) && pd(c)),
-        ...Z('prethodno nisu prijavljivale nasilje i nisu se pridružile krivičnom gonjenju', c => !pr(c) && !pd(c)),
+        ...Z('su prethodno prijavljivale nasilje, a nisu se pridružile krivičnom gonjenju', c => pr(c) && pdNe(c)),
+        ...Z('prethodno nisu prijavljivale nasilje, a pridružile su se krivičnom gonjenju', c => prNe(c) && pd(c)),
+        ...Z('prethodno nisu prijavljivale nasilje i nisu se pridružile krivičnom gonjenju', c => prNe(c) && pdNe(c)),
         ...Z('su prethodno prijavljivale nasilje, a optuženi je prethodno osuđivan', c => pr(c) && os(c)),
         ...Z('su prethodno prijavljivale nasilje, a optuženi je osuđivan za istovrsna djela', c => pr(c) && is(c)),
       ], null, 'Predmet sa više oštećenih broji se jednom za svaku oštećenu.'), courtTable('Optuženi', os1, [
@@ -1233,8 +1237,9 @@
   // tabele za izvjestaj - nasilje nad zenama
   function vawReport(D) {
     const cs = vawCases(D.predmeti), zs = zrtveOf(D, cs), O = optRows(cs);
-    const pr = c => c.prijavljivala === true, pd = c => c.pridruzila === true, os = c => c.osudjivan === true, is = c => c.istovrsna === true, ol = c => c.olaksavajucaNepridruzivanje === true;
+    const pr = c => c.prijavljivala === true, pd = c => c.pridruzila === true, prNe = c => !pr(c) && c.prijavljivala !== 'np', pdNe = c => !pd(c) && c.pridruzila !== 'np', os = c => c.osudjivan === true, is = c => c.istovrsna === true, ol = c => c.olaksavajucaNepridruzivanje === true;
     const N = ['Br. predmeta nasilja nad ženama u koje su monitori vršili uvid', x => x.length];
+    const npPr = zs.some(c => c.prijavljivala === 'np'), npPd = zs.some(c => c.pridruzila === 'np');
     const P2 = (h, f) => pair(h, x => cnt(x, f), x => x.length);
     const T = (title, cols, info) => courtRows(title, cs, cols, info, { full: true });
     const NZ = ['Br. oštećenih u predmetima u koje su monitori vršili uvid', x => x.length], ZI = 'Predmet sa više oštećenih broji se jednom za svaku oštećenu.';
@@ -1246,10 +1251,12 @@
     const kat = k => c => zat(c) && zatvorKat(c) === k;
     const out = [
       T('Broj predmeta nasilja nad ženama u koje su monitori vršili uvid', [N]),
-      TZ('Oštećene prema tome da li su ranije prijavljivale nasilje', [...P2('Oštećena ranije PRIJAVLJIVALA nasilje', pr), ...P2('Oštećena ranije NIJE PRIJAVLJIVALA nasilje', c => !pr(c))]),
-      TZ('Oštećene prema tome da li su se pridružile krivičnom gonjenju', [...P2('Oštećena se PRIDRUŽILA krivičnom gonjenju', pd), ...P2('Oštećena se NIJE PRIDRUŽILA krivičnom gonjenju', c => !pd(c))]),
-      TZ('Oštećene koje su ranije prijavljivale nasilje, prema pridruživanju krivičnom gonjenju', [...P2('Ranije PRIJAVLJIVALA, PRIDRUŽILA se', c => pr(c) && pd(c)), ...P2('Ranije PRIJAVLJIVALA, NIJE se PRIDRUŽILA', c => pr(c) && !pd(c))]),
-      TZ('Oštećene koje ranije nijesu prijavljivale nasilje, prema pridruživanju krivičnom gonjenju', [...P2('Ranije NIJE PRIJAVLJIVALA, PRIDRUŽILA se', c => !pr(c) && pd(c)), ...P2('Ranije NIJE PRIJAVLJIVALA, NIJE se PRIDRUŽILA', c => !pr(c) && !pd(c))]),
+      TZ('Oštećene prema tome da li su ranije prijavljivale nasilje', [...P2('Oštećena ranije PRIJAVLJIVALA nasilje', pr), ...P2('Oštećena ranije NIJE PRIJAVLJIVALA nasilje', prNe),
+        ...(npPr ? P2('Nema podataka o ranijem prijavljivanju', c => c.prijavljivala === 'np') : [])]),
+      TZ('Oštećene prema tome da li su se pridružile krivičnom gonjenju', [...P2('Oštećena se PRIDRUŽILA krivičnom gonjenju', pd), ...P2('Oštećena se NIJE PRIDRUŽILA krivičnom gonjenju', pdNe),
+        ...(npPd ? P2('Nema podataka o pridruživanju', c => c.pridruzila === 'np') : [])]),
+      TZ('Oštećene koje su ranije prijavljivale nasilje, prema pridruživanju krivičnom gonjenju', [...P2('Ranije PRIJAVLJIVALA, PRIDRUŽILA se', c => pr(c) && pd(c)), ...P2('Ranije PRIJAVLJIVALA, NIJE se PRIDRUŽILA', c => pr(c) && pdNe(c))]),
+      TZ('Oštećene koje ranije nijesu prijavljivale nasilje, prema pridruživanju krivičnom gonjenju', [...P2('Ranije NIJE PRIJAVLJIVALA, PRIDRUŽILA se', c => prNe(c) && pd(c)), ...P2('Ranije NIJE PRIJAVLJIVALA, NIJE se PRIDRUŽILA', c => prNe(c) && pdNe(c))]),
       T('Nepridruživanje oštećene krivičnom gonjenju kao olakšavajuća okolnost', [N, ...P2('Kao olakšavajuća okolnost cijenjeno je da se oštećena nije pridružila krivičnom gonjenju', ol)]),
       TO('Prethodna osuđivanost okrivljenih', [NO, ...P2('Okrivljeni prethodno osuđivan', os), ...P2('Okrivljeni prethodno osuđivan za istovjetno ili istovrsno krivično djelo', is)]),
       TZ('Ranije prijavljivanje nasilja i prethodna osuđivanost okrivljenih', [...P2('Oštećena ranije prijavljivala nasilje, optuženi prethodno osuđivan', c => pr(c) && os(c)),

@@ -704,7 +704,11 @@
   for (const [k, f] of Object.entries(FORMS)) if (PHASED.includes(baseKey(k)) && baseKey(k) !== 'faze') f.splice(1, 0, FAZA);
   for (const f of FORMS.roc_rocista) if (f.type === 'choice' && !fallbackChoices('roc_rocista', f.name).length) FALLBACK_CHOICES[`rocista.${f.name}`] = DA_NE_NA;
 
-  const fieldsOf = listKey => FORMS[listKey].filter(f => f.name);
+  // oznaka za provjeru postoji na svakom predmetu, van formi
+  const PROVJERA = [{ name: 'provjera', label: 'Označeno za provjeru', type: 'bool', hidden: true }, { name: 'provjeraNapomena', label: 'Napomena za provjeru', type: 'longtext', hidden: true },
+    { name: 'provjeraOd', label: 'Za provjeru označio/la', type: 'text', hidden: true }, { name: 'provjeraAt', label: 'Za provjeru označeno', type: 'text', hidden: true }];
+  const fieldsOf = listKey => { const F = FORMS[listKey].filter(f => f.name), l = LIST_BY_KEY[listKey];
+    return l && l.isCase ? [...F.filter(f => !PROVJERA.some(p => p.name === f.name)), ...PROVJERA] : F; };
   function isEmpty(v) { return v === null || v === undefined || v === '' || (Array.isArray(v) && v.length === 0); }
   function hasValue(field, v) { return field.type === 'bool' ? v === true : !isEmpty(v); }
   function isVisible(field, rec, ctx) { return !field.show || hasValue(field, rec[field.name]) || field.show(rec, ctx || {}); }

@@ -4,6 +4,11 @@ Desktop aplikacija (Windows) za unos i analizu podataka sa projekata praćenja s
 
 ## Istorija izmjena
 
+### 1.2.8
+- Svaki korisnik može predmet označiti za provjeru i ostaviti napomenu šta nije jasno. Označeni predmeti su u listi svijetložuti, napomena je u posljednjoj koloni „Za provjeru”, a filter „⚑ Za provjeru” prikazuje samo njih. U samom predmetu napomena je na vrhu, a na dnu se može dopuniti ili oznaka ukloniti.
+- Nasilje nad ženama: pitanja da li je žrtva ranije prijavljivala nasilje i da li se pridružila krivičnom gonjenju imaju i odgovor „Nema podataka”, koji se u tabelama prikazuje posebno i ne računa se kao „Ne”.
+- Trajanje kazne zatvora i utvrđene kazne kod uslovne osude može se upisati do 99 dana.
+
 ### 1.2.7
 - Pri zatvaranju aplikacije prvo se šalju izmjene koje još nijesu poslate na server. Ako slanje ne uspije (nema interneta, potrošen limit), aplikacija to javi i nudi ponovni pokušaj ili zatvaranje; izmjene ostaju sačuvane na računaru i šalju se pri sljedećem pokretanju.
 - Tabela 9 kod nasilja nad ženama (Odnos oštećenih i okrivljenih) prikazuje odnose po kategorijama iz izvještaja, grupisane na sadašnji partnerski odnos, bivši partnerski odnos, porodicu i srodstvo i odnose van porodice, sa zbirom za svaku grupu. Odnosi upisani drugačije (npr. otac, brat, sestrična) automatski se svrstavaju u odgovarajuću kategoriju.

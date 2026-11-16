@@ -288,3 +288,10 @@ table.grid { width: 100%; border-collapse: collapse; }
 .trajanje { display: flex; gap: 12px; flex-wrap: wrap; }
 .trajanje .mini { display: flex; flex-direction: column; font-size: 12px; color: var(--ink-3); gap: 2px; font-weight: 400; }
 .trajanje input { width: 80px; color: var(--ink); }
+.grid tr.provjera td { background: #fff8d6; }
+.grid tr.provjera:hover td { background: #fff1b8; }
+.provjera-cell { color: #6b4500; min-width: 220px; max-width: 320px; }
+.note.provjera { background: #fff8d6; color: #5c4300; border: 1px solid #f1dc8a; }
+.provjera-bar { margin-top: 14px; display: flex; justify-content: flex-end; }
+.provjera-card { margin-top: 14px; padding: 14px 18px; background: #fffbe8; border: 1px solid #f1dc8a; display: flex; flex-direction: column; gap: 8px; }
+.provjera-card textarea { width: 100%; }

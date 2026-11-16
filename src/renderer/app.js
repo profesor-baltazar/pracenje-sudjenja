@@ -64,10 +64,10 @@ const optNaslov = (x, i) => `Optuženi ${i + 1}${x.oznaka ? ' – ' + x.oznaka :
 const PRAZAN_OPT = { oznaka: null, osudjivan: false, istovrsna: false, detaljiPresuda: null, glavnaSankcija: null, zatvorGodina: null, zatvorMjeseci: null, zatvorDana: null, mjeraBezbjednosti: null, sankcija: null };
 const tip = (...t) => x => t.includes(S.sankTip(x));
 const SANK_POLJA = [['glavnaSankcija', 'choice', 'Glavna sankcija', { izbori: S.SANKCIJE }],
-  ['zatvor', 'trajanje', 'Trajanje kazne zatvora', { polja: ['zatvorGodina', 'zatvorMjeseci', 'zatvorDana'], max: [40, 12, 31], show: tip('zatvor') }],
+  ['zatvor', 'trajanje', 'Trajanje kazne zatvora', { polja: ['zatvorGodina', 'zatvorMjeseci', 'zatvorDana'], max: [40, 12, 99], show: tip('zatvor') }],
   ['novcanaIznos', 'number', 'Iznos novčane kazne (€)', { show: tip('novcana'), cls: 'pola' }],
   ['radCasova', 'number', 'Broj časova rada', { max: 360, show: tip('rad'), cls: 'pola', hint: 'Od 60 do 360 časova (čl. 41 KZ)' }],
-  ['uo', 'trajanje', 'Utvrđena kazna zatvora', { polja: ['uoGodina', 'uoMjeseci', 'uoDana'], max: [2, 12, 31], show: tip('uo', 'zn'), hint: 'Kazna koja se neće izvršiti ako osuđeni ne učini novo krivično djelo' }],
+  ['uo', 'trajanje', 'Utvrđena kazna zatvora', { polja: ['uoGodina', 'uoMjeseci', 'uoDana'], max: [2, 12, 99], show: tip('uo', 'zn'), hint: 'Kazna koja se neće izvršiti ako osuđeni ne učini novo krivično djelo' }],
   ['provjera', 'trajanje', 'Vrijeme provjeravanja', { polja: ['provjeraGodina', 'provjeraMjeseci'], max: [5, 12], show: tip('uo', 'zn'), hint: 'Od 1 do 5 godina (čl. 53 KZ)' }],
   ['zastitniNadzor', 'checks', 'Sadržina zaštitnog nadzora', { izbori: S.ZASTITNI_NADZOR, show: tip('zn'), hint: 'Obaveze iz čl. 61 KZ' }],
   ['uzMjeru', 'bool', 'Uz glavnu sankciju izrečena je i mjera bezbjednosti', { show: tip('zatvor', 'novcana', 'rad', 'uo', 'zn', 'ostalo') }],
@@ -89,7 +89,7 @@ const GRUPE = {
       ['opisOdnosa', 'text', x => POZNANSTVA[x.odnos] ? 'Opišite preciznije odnos' : 'Detaljniji opis odnosa',
         { show: x => !!POZNANSTVA[x.odnos] || !!x.opisOdnosa,
           hint: x => POZNANSTVA[x.odnos] ? `${x.odnos}: ${POZNANSTVA[x.odnos]} Opišite o kakvom se odnosu radi (npr. komšija iz iste zgrade, kolega s posla, kupac u prodavnici), da bi se kategorija mogla provjeriti.` : 'Opis upisan ranije; za srodničke odnose nije potreban.' }],
-      ['prijavljivala', 'bool', 'Žrtva je prethodno prijavljivala nasilje'], ['pridruzila', 'bool', 'Žrtva se pridružila krivičnom gonjenju']] },
+      ['prijavljivala', 'bool', 'Žrtva je prethodno prijavljivala nasilje', { nemaPodataka: true }], ['pridruzila', 'bool', 'Žrtva se pridružila krivičnom gonjenju', { nemaPodataka: true }]] },
   optuzeni: { of: c => S.optuzeniOf(c), naslov: optNaslov, dodaj: '+ Dodaj optuženog', prazno: PRAZAN_OPT,
     polja: [['oznaka', 'text', 'Oznaka optuženog (nije obavezno)', { hint: 'npr. 1. optuženi ili inicijali', cls: 'pola' }],
       ['osudjivan', 'bool', 'Optuženi je prethodno osuđivan'],
@@ -353,7 +353,7 @@ function viewCases() {
   const q = st.search.trim().toLowerCase();
   const prit = c => c.fields.Pritvorskipredmet === true || c.fields.pritvorski === true;
   const F = { svi: () => true, prit, ok: c => c.fields.Vrstapredmeta === 'Organizovani kriminal', vk: c => c.fields.Vrstapredmeta === 'Visoka korupcija',
-    otvoreni: c => !S.isDate(c.fields.Odlaganjero_x010d_i_x0161_ta), moji: c => c.createdBy === st.app.me.name || c.fields.monitor === st.app.me.name };
+    otvoreni: c => !S.isDate(c.fields.Odlaganjero_x010d_i_x0161_ta), moji: c => c.createdBy === st.app.me.name || c.fields.monitor === st.app.me.name, provjera: c => !!c.fields.provjera };
   const all = recs(list);
   const courts = [...new Set(all.map(c => c.fields.sud).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'sr'));
   const rows = all.filter(F[st.filter] || F.svi).filter(c => !st.sud || c.fields.sud === st.sud)
@@ -361,12 +361,12 @@ function viewCases() {
     .sort((a, b) => String(b.modifiedAt || '').localeCompare(String(a.modifiedAt || '')));
   const chip = (k, l) => h('button', { class: 'chip' + (st.filter === k ? ' on' : ''), onclick: () => { st.filter = k; render(); } }, l);
   const cust = !!sp.custom;
-  const chips = cust ? [chip('svi', 'Svi'), chip('moji', 'Moji unosi')] : [chip('svi', 'Svi'), mod !== 'vaw' ? chip('prit', 'Pritvorski') : null, !roc && mod !== 'vaw' ? chip('otvoreni', 'Bez pravosnažnosti') : null,
-    st.space === 'okk' ? [chip('ok', 'Org. kriminal'), chip('vk', 'Visoka korupcija')] : null, chip('moji', 'Moji unosi')];
+  const chips = cust ? [chip('svi', 'Svi'), chip('moji', 'Moji unosi'), chip('provjera', '⚑ Za provjeru')] : [chip('svi', 'Svi'), mod !== 'vaw' ? chip('prit', 'Pritvorski') : null, !roc && mod !== 'vaw' ? chip('otvoreni', 'Bez pravosnažnosti') : null,
+    st.space === 'okk' ? [chip('ok', 'Org. kriminal'), chip('vk', 'Visoka korupcija')] : null, chip('moji', 'Moji unosi'), chip('provjera', '⚑ Za provjeru')];
   const hasSud = mod !== 'okk';
-  const cols = cust ? ['Predmet', 'Sud', 'Popunjenost', 'Posljednja izmjena'] : roc ? ['Predmet', hasSud ? 'Sud' : null, 'Krivično djelo', 'Ročišta', 'Posljednje ročište', 'Posljednja izmjena', ' ']
+  const cols = [...(cust ? ['Predmet', 'Sud', 'Popunjenost', 'Posljednja izmjena'] : roc ? ['Predmet', hasSud ? 'Sud' : null, 'Krivično djelo', 'Ročišta', 'Posljednje ročište', 'Posljednja izmjena', ' ']
     : mod === 'vaw' ? ['Predmet', 'Sud', 'Krivično djelo', 'Ranije prijavljivala', 'Nepridruživanje kao olakšavajuće', 'Posljednja izmjena']
-    : ['Predmet', hasSud ? 'Sud' : 'Vrsta', 'Optužni akt', 'Oznake', 'Popunjenost', 'Posljednja izmjena'];
+    : ['Predmet', hasSud ? 'Sud' : 'Vrsta', 'Optužni akt', 'Oznake', 'Popunjenost', 'Posljednja izmjena']), 'Za provjeru'];
   const newLabel = roc ? '+ Novi praćeni predmet' : '+ Novi predmet';
   const fl = stepList('faze'), nPh = c => fl ? allChildRecs(fl.key, c.id).length : 0;
   const tags = c => [prit(c) ? h('span', { class: 'badge blue' }, 'pritvor') : null, ' ', nPh(c) ? h('span', { class: 'badge orange' }, nPh(c) === 1 ? 'ponovljeno suđenje' : `${nPh(c)} ponovljena suđenja`) : null, ' ',
@@ -382,7 +382,8 @@ function viewCases() {
       case 'Vrsta': return h('td', {}, f.Vrstapredmeta || h('span', { class: 'muted' }, '—'));
       case 'Optužni akt': return h('td', {}, f.Vrstaoptu_x017e_nogakta || h('span', { class: 'muted' }, '—'));
       case 'Krivično djelo': return h('td', { class: 'small' }, f.krivicnoDjelo || h('span', { class: 'muted' }, '—'));
-      case 'Ranije prijavljivala': return daNe(S.zrtveOf(f).some(z => z.prijavljivala === true));
+      case 'Ranije prijavljivala': { const z = S.zrtveOf(f);
+        return z.some(x => x.prijavljivala === true) ? daNe(true) : z.some(x => x.prijavljivala === 'np') ? h('td', {}, h('span', { class: 'muted' }, 'Nema podataka')) : daNe(false); }
       case 'Nepridruživanje kao olakšavajuće': return daNe(f.olaksavajucaNepridruzivanje === true);
       case 'Oznake': return h('td', {}, tags(c));
       case 'Ročišta': return h('td', {}, `${H.length}`, H.length ? h('span', { class: 'small muted' }, ` (${H.filter(x => !x.fields.odrzano).length} odloženo)`) : null);
@@ -391,6 +392,7 @@ function viewCases() {
       case 'Popunjenost': return h('td', { title: steps.filter(s => s.count || s.none).map(s => s.title).join(', ') }, h('div', { class: 'progress' }, steps.map(s => h('i', { class: s.count || s.none ? 'done' : '' })),
         h('span', { class: 'small muted', style: 'margin-left:6px' }, `${steps.filter(s => s.count || s.none).length}/${steps.length}`)));
       case 'Posljednja izmjena': return h('td', { class: 'small muted' }, c.modifiedBy || '', h('br'), ago(c.modifiedAt));
+      case 'Za provjeru': return h('td', { class: 'small provjera-cell', title: f.provjeraNapomena || '' }, f.provjera ? ['⚑ ', (f.provjeraNapomena || 'Označeno').slice(0, 90) + ((f.provjeraNapomena || '').length > 90 ? '…' : '')] : null);
     }
   };
   return h('div', {}, topbar(h('div', {}, h('div', { class: 'small muted' }, S.MODULES.find(m => m.key === mod).title), h('h1', {}, sp.title)), h('span', { class: 'muted' }, `${all.length} predmeta`)),
@@ -403,7 +405,7 @@ function viewCases() {
         h('button', { class: 'btn primary', onclick: () => { st.view = 'case'; st.caseId = null; st.pendingCase = null; st.step = list; st.edit = newEdit(list); if (st.sud && 'sud' in st.edit.draft) { st.edit.draft.sud = st.sud; st.edit.base = JSON.stringify(st.edit.draft); } render(); } }, newLabel)),
       h('div', { class: 'card' }, rows.length ? h('table', { class: 'grid' },
         h('thead', {}, h('tr', {}, cols.filter(Boolean).map(c => h('th', { title: NASLOVI[c] || '' }, c)))),
-        h('tbody', {}, rows.slice(0, 500).map(c => h('tr', { class: 'click', onclick: () => openCase(c.id) }, cols.filter(Boolean).map(col => cell(c, col))))))
+        h('tbody', {}, rows.slice(0, 500).map(c => h('tr', { class: 'click' + (c.fields.provjera ? ' provjera' : ''), onclick: () => openCase(c.id) }, cols.filter(Boolean).map(col => cell(c, col))))))
         : h('div', { class: 'empty' }, all.length ? 'Nijedan predmet ne odgovara pretrazi.' : `Još nema predmeta. Kliknite „${newLabel.slice(2)}” da unesete prvi${st.app.isAdmin ? ', ili uvezite postojeće podatke u Administraciji' : ''}.`)),
       rows.length > 500 ? h('p', { class: 'small muted' }, `Prikazano prvih 500 od ${rows.length} – suzite pretragu.`) : null));
 }
@@ -420,7 +422,7 @@ function viewCase() {
       c.fields.krivicnoDjelo ? h('span', { class: 'badge' }, c.fields.krivicnoDjelo.slice(0, 40)) : null,
       c.fields.Pritvorskipredmet || c.fields.pritvorski ? h('span', { class: 'badge blue' }, 'pritvorski') : null,
       S.isDate(c.fields.Odlaganjero_x010d_i_x0161_ta) ? h('span', { class: 'badge ok' }, 'pravosnažno ' + S.fmtDate(c.fields.Odlaganjero_x010d_i_x0161_ta)) : null) : null)),
-    h('div', { class: 'page' }, c && stepList('faze') ? phaseBar(c) : null, h('div', { class: single ? '' : 'workspace' },
+    h('div', { class: 'page' }, c && stepList('faze') ? phaseBar(c) : null, provjeraBanner(c), h('div', { class: single ? '' : 'workspace' },
       single ? null : h('nav', { class: 'card steps' }, steps.map(s => h('button', {
         class: 'step' + (s.key === st.step ? ' on' : '') + (s.count || s.none ? ' done' : '') + (s.na ? ' na' : ''), disabled: !c && !s.isCase && !previewMode(),
         title: s.na || (!c && !s.isCase ? (previewMode() ? 'Pregled forme (administrator) – unos se može sačuvati tek kad sačuvate osnovne podatke.' : 'Prvo sačuvajte osnovne podatke predmeta.') : ''),
@@ -444,7 +446,33 @@ function viewCase() {
         st.edit ? viewForm() : (cur.many && !childRecs(st.step, st.caseId).length ? h('div', { class: 'empty' }, 'Još nema unosa. Kliknite „+ Dodaj”.') : null),
         (c || previewMode()) && !single ? h('div', { class: 'stepnav' },
           i > 0 ? h('button', { class: 'btn ghost', onclick: () => stepTo(steps[i - 1].key) }, `← ${steps[i - 1].title}`) : h('span'),
-          i < steps.length - 1 ? h('button', { class: 'btn', onclick: () => stepTo(steps[i + 1].key) }, `${steps[i + 1].title} →`) : h('button', { class: 'btn', onclick: () => go('cases') }, 'Završi i vrati se na listu')) : null))));
+          i < steps.length - 1 ? h('button', { class: 'btn', onclick: () => stepTo(steps[i + 1].key) }, `${steps[i + 1].title} →`) : h('button', { class: 'btn', onclick: () => go('cases') }, 'Završi i vrati se na listu')) : null)), provjeraPanel(c)));
+}
+// oznaka za provjeru: postavlja i uklanja bilo koji korisnik, uz napomenu sta nije jasno
+async function setProvjera(c, on, txt) {
+  const p = { provjera: !!on, provjeraNapomena: on ? (txt || '').trim() || null : null, provjeraOd: on ? st.app.me.name : null, provjeraAt: on ? new Date().toISOString() : null };
+  await api.save({ list: c.list, id: c.id, fields: { ...c.fields, ...p } });
+  if (st.edit && st.edit.id === c.id) { Object.assign(st.edit.draft, p); const b = JSON.parse(st.edit.base); Object.assign(b, p); st.edit.base = JSON.stringify(b); }
+  st.provjeraOtvorena = false; st.data = await getData(); render();
+  toast(on ? 'Predmet je označen za provjeru.' : 'Oznaka za provjeru je uklonjena.', 'ok');
+}
+function provjeraBanner(c) {
+  if (!c || !c.fields.provjera) return null;
+  return h('div', { class: 'note provjera' }, h('b', {}, '⚑ Predmet je označen za provjeru'), c.fields.provjeraOd ? ` (${c.fields.provjeraOd}, ${S.fmtDate(String(c.fields.provjeraAt || '').slice(0, 10))})` : '',
+    c.fields.provjeraNapomena ? h('div', {}, c.fields.provjeraNapomena) : null);
+}
+function provjeraPanel(c) {
+  if (!c) return null;
+  const on = !!c.fields.provjera;
+  if (!on && !st.provjeraOtvorena) return h('div', { class: 'provjera-bar' }, h('button', { class: 'btn', onclick: () => { st.provjeraOtvorena = true; render(); } }, '⚑ Označi predmet za provjeru'));
+  const id = 'provjera-txt';
+  return h('div', { class: 'card provjera-card' },
+    h('div', { class: 'provjera-head' }, h('b', {}, on ? '⚑ Predmet je označen za provjeru' : '⚑ Označi predmet za provjeru')),
+    h('label', { class: 'small muted', for: id }, 'Šta nije jasno u ovom predmetu (napomenu vide svi korisnici):'),
+    h('textarea', { id, 'data-key': id, rows: 3, placeholder: 'npr. Nije jasno da li je sankcija iz prvostepene ili pravosnažne presude.' }, on ? c.fields.provjeraNapomena || '' : ''),
+    h('div', { class: 'formbar' },
+      h('button', { class: 'btn primary', onclick: () => setProvjera(c, true, document.getElementById(id).value) }, on ? 'Sačuvaj napomenu' : 'Označi'),
+      on ? h('button', { class: 'btn', onclick: () => setProvjera(c, false) }, 'Ukloni oznaku') : h('button', { class: 'btn ghost', onclick: () => { st.provjeraOtvorena = false; render(); } }, 'Otkaži')));
 }
 async function stepTo(key) { if (!(await leaveEdit(true))) return; st.step = key; startStep(); render(); document.querySelector('.main').scrollTop = 0; }
 
@@ -644,7 +672,8 @@ function input(f, list, d) {
         if (typeof opt.hint === 'function') opt = { ...opt, hint: opt.hint(x) };
         if (tip === 'bool') return h('div', { class: 'zrtva-q' }, h('span', {}, lbl), h('div', { class: 'seg' },
           h('button', { class: x[n] === true ? 'on' : '', 'data-key': pk(i, n) + '.da', onclick: () => upd(i, { [n]: true }) }, 'Da'),
-          h('button', { class: x[n] !== true ? 'on' : '', 'data-key': pk(i, n) + '.ne', onclick: () => upd(i, { [n]: false }) }, 'Ne')));
+          h('button', { class: x[n] !== true && x[n] !== 'np' ? 'on' : '', 'data-key': pk(i, n) + '.ne', onclick: () => upd(i, { [n]: false }) }, 'Ne'),
+          opt.nemaPodataka ? h('button', { class: x[n] === 'np' ? 'on' : '', 'data-key': pk(i, n) + '.np', onclick: () => upd(i, { [n]: 'np' }) }, 'Nema podataka') : null));
         if (tip === 'trajanje') { const nazivi = ['godine', 'mjeseci', 'dani'];
           return h('div', { class: 'field grupa-polje' }, h('label', {}, lbl), h('div', { class: 'trajanje' }, opt.polja.map((k, j) => h('label', { class: 'mini' }, nazivi[j],
             h('input', { type: 'number', min: 0, max: opt.max[j], step: 1, value: x[k] ?? '', 'data-key': pk(i, k), oninput: e => upd(i, { [k]: e.target.value === '' ? null : Number(e.target.value) }) })))),
