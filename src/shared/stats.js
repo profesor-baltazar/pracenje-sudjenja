@@ -832,11 +832,22 @@
   const optRows = cs => cs.flatMap(c => { const o = S.optuzeniOf(c); return (o.length ? o : [{}]).map(x => ({ ...x, sud: c.sud, olaksavajucaNepridruzivanje: c.olaksavajucaNepridruzivanje })); });
   // svaka zrtva kao poseban red (sa sudom i podacima o optuzenom iz predmeta); predmet bez upisane zrtve broji se kao jedna
   const zrtveOf = (d, cs) => cs.flatMap(c => { const z = S.zrtveOf(c); return (z.length ? z : [{}]).map(x => ({ ...x, sud: c.sud, osudjivan: c.osudjivan, istovrsna: c.istovrsna })); });
+  // po kategorijama iz izvjestaja; ostali upisi i prazna polja posebno, na kraju
   function relation(cs) {
-    const g = [...by(cs.filter(c => !blank(c.odnos)), c => c.odnos.trim().toLowerCase()).entries()].sort((a, b) => b[1].length - a[1].length);
-    return table('Odnos oštećenih i okrivljenih', ['Odnos', 'Broj oštećenih', 'Ranije prijavljivale nasilje', 'Pridružile se krivičnom gonjenju'],
-      g.map(([k, v]) => { const a = v.filter(c => c.prijavljivala === true).length, b = v.filter(c => c.pridruzila === true).length;
-        return [k.charAt(0).toUpperCase() + k.slice(1), v.length, `${a} (${pct(a, v.length)})`, `${b} (${pct(b, v.length)})`]; }));
+    const OST = 'Ostali odnosi', NIJE = 'Odnos nije upisan';
+    const kat = c => blank(c.odnos) ? NIJE : S.odnosKategorija(c.odnos) || OST;
+    const g = by(cs, kat);
+    const row = (k, v) => { const a = v.filter(c => c.prijavljivala === true).length, b = v.filter(c => c.pridruzila === true).length;
+      return [k, v.length, a, pctR(a, v.length), b, pctR(b, v.length)]; };
+    // grupe sa zbirom; prikazuju se samo kategorije koje imaju oštećenih
+    const rows = S.ODNOS_GRUPE.flatMap(([naziv, kat]) => { const ks = kat.filter(k => g.has(k)); if (!ks.length) return [];
+      return [...ks.map(k => row(k, g.get(k))), row(naziv + ' – ukupno', ks.flatMap(k => g.get(k)))]; });
+    for (const k of [OST, NIJE]) if (g.has(k)) rows.push(row(k, g.get(k)));
+    const ost = (g.get(OST) || []).map(c => c.odnos.trim());
+    return table('Odnos oštećenih i okrivljenih', ['Odnos oštećenih i okrivljenih', 'Broj oštećenih', 'Ranije prijavljivale nasilje', 'Procenat', 'Pridružile se krivičnom gonjenju', 'Procenat'],
+      cs.length ? [...rows, row('UKUPNO', cs)] : [],
+      'Odnosi upisani drugačije svrstani su u kategorije: otac → ćerka, sin → majka, brat → sestra, očuh → pastorka, ostali srodnici → rođaci.' +
+        (ost.length ? ` Nije svrstano: ${[...new Set(ost)].join(', ')}.` : ''));
   }
   function krivicnaDjela(cs) {
     const dj = c => Array.isArray(c.djela) ? c.djela.filter(x => x && x.clan) : [];

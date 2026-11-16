@@ -74,11 +74,21 @@ const SANK_POLJA = [['glavnaSankcija', 'choice', 'Glavna sankcija', { izbori: S.
   ['mjereBezbjednosti', 'checks', 'Izrečene mjere bezbjednosti', { izbori: S.MJERE_BEZBJEDNOSTI, show: x => S.sankTip(x) === 'mb' || (x.uzMjeru === true && tip('zatvor', 'novcana', 'rad', 'uo', 'zn', 'ostalo')(x)) }],
   ['mjeraBezbjednosti', 'text', 'Ranije upisano (tekst)', { show: x => !!x.mjeraBezbjednosti }],
   ['sankcija', 'text', 'Napomena o sankciji (nije obavezno)', { hint: 'Ako je oslobođen optužbi, upisati najvažnije razloge' }]];
+// definicije kategorija iz metodologije izvjestaja (odnosi van porodice)
+const POZNANSTVA = {
+  'Blisko poznanstvo': 'prijatelji, komšije i druga lica s kojima žrtva ima redovan i dugotrajan kontakt, ali nije sa njima u srodstvu.',
+  'Površno poznanstvo': 'lica sa kojima je žrtva u kontaktu samo povremeno, poput poznanika iz zajedničkog okruženja, ali bez dubljeg emocionalnog ili ličnog odnosa.',
+  'Profesionalni odnos': 'žrtva i okrivljeni poznaju se isključivo kroz posao, bez lične povezanosti.',
+  'Slučajni kontakt': 'žrtva i okrivljeni sreli su se samo jednom ili nekoliko puta u okolnostima koje nijesu dovele do trajnijeg odnosa (npr. kupci u prodavnici, prolaznici).',
+  'Nepoznati': 'žrtva i okrivljeni nijesu imali prethodni kontakt ili poznanstvo prije kritičnog slučaja.',
+};
 const GRUPE = {
   zrtve: { of: c => S.zrtveOf(c), naslov: (x, i) => `Žrtva ${i + 1}`, dodaj: '+ Dodaj žrtvu', prazno: { odnos: null, opisOdnosa: null, prijavljivala: false, pridruzila: false },
     polja: [['odnos', 'combo', 'Odnos žrtve sa optuženim', { izbori: 'odnos', cls: 'pola', hint: 'Za lica koja nisu srodnici izaberite jednu od kategorija poznanstva (pređite mišem preko polja za objašnjenje). Ako odnos nije na listi, izaberite „Drugi odnos” i upišite ga.',
         title: 'Blisko poznanstvo: prijatelji, komšije i druga lica sa kojima žrtva ima redovan i dugotrajan kontakt, a nije u srodstvu.\nPovršno poznanstvo: lica sa kojima je žrtva u kontaktu samo povremeno, bez dubljeg ličnog odnosa.\nProfesionalni odnos: poznaju se isključivo kroz posao.\nSlučajni kontakt: sreli su se jednom ili nekoliko puta, bez trajnijeg odnosa (npr. kupci u prodavnici, prolaznici).\nNepoznati: nijesu imali kontakt ni poznanstvo prije kritičnog događaja.' }],
-      ['opisOdnosa', 'text', 'Detaljniji opis odnosa (nije obavezno)', { hint: 'npr. maloljetna ćerka, sestra od tetke, komšinica' }],
+      ['opisOdnosa', 'text', x => POZNANSTVA[x.odnos] ? 'Opišite preciznije odnos' : 'Detaljniji opis odnosa',
+        { show: x => !!POZNANSTVA[x.odnos] || !!x.opisOdnosa,
+          hint: x => POZNANSTVA[x.odnos] ? `${x.odnos}: ${POZNANSTVA[x.odnos]} Opišite o kakvom se odnosu radi (npr. komšija iz iste zgrade, kolega s posla, kupac u prodavnici), da bi se kategorija mogla provjeriti.` : 'Opis upisan ranije; za srodničke odnose nije potreban.' }],
       ['prijavljivala', 'bool', 'Žrtva je prethodno prijavljivala nasilje'], ['pridruzila', 'bool', 'Žrtva se pridružila krivičnom gonjenju']] },
   optuzeni: { of: c => S.optuzeniOf(c), naslov: optNaslov, dodaj: '+ Dodaj optuženog', prazno: PRAZAN_OPT,
     polja: [['oznaka', 'text', 'Oznaka optuženog (nije obavezno)', { hint: 'npr. 1. optuženi ili inicijali', cls: 'pola' }],
@@ -144,6 +154,7 @@ function updateBanner() {
 window.addEventListener('online', () => api.setOnline(true));
 window.addEventListener('offline', () => { api.setOnline(false); st.sync = { ...st.sync, state: 'offline' }; renderTop(); });
 window.__hasUnsaved = () => !!(st.edit && st.edit.dirty);
+window.__toast = msg => toast(msg);
 document.addEventListener('keydown', ev => {
   const k = ev.key.toLowerCase();
   if (st.modal) { if (k === 'escape') st.modal.done(false); if (k === 'enter') st.modal.done(true); return; }
@@ -629,6 +640,8 @@ function input(f, list, d) {
       const unos = (x, i, [n, tip, lbl, opt]) => {
         opt = opt || {};
         if (opt.show && !opt.show(x)) return null;
+        if (typeof lbl === 'function') lbl = lbl(x);
+        if (typeof opt.hint === 'function') opt = { ...opt, hint: opt.hint(x) };
         if (tip === 'bool') return h('div', { class: 'zrtva-q' }, h('span', {}, lbl), h('div', { class: 'seg' },
           h('button', { class: x[n] === true ? 'on' : '', 'data-key': pk(i, n) + '.da', onclick: () => upd(i, { [n]: true }) }, 'Da'),
           h('button', { class: x[n] !== true ? 'on' : '', 'data-key': pk(i, n) + '.ne', onclick: () => upd(i, { [n]: false }) }, 'Ne')));
@@ -854,7 +867,7 @@ function viewStats() {
             : h('div', { class: 'info' }, 'Nema podataka za ovaj pokazatelj.'),
           b.info ? h('div', { class: 'info' }, 'ⓘ ', b.info) : null))))));
 }
-const AGG_ROW = /^(Ukupno|UKUPNO|Prosjek|OSNOVNI SUDOVI|VIŠI SUDOVI|SVI SUDOVI)$/;
+const AGG_ROW = /^(Ukupno|UKUPNO|Prosjek|OSNOVNI SUDOVI|VIŠI SUDOVI|SVI SUDOVI)$| – ukupno$/;
 function viewReport() {
   const mod = S.MODULES.find(m => m.key === st.repModule) || S.MODULES[0], admin = st.app.isAdmin, edit = admin && st.repEdit;
   let tables = [];

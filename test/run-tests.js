@@ -410,7 +410,7 @@ test('Nasilje nad ženama: više žrtava u jednom predmetu', () => {
   assert.deepStrictEqual(rt[1].rows.slice(-1)[0], ['SVI SUDOVI', 3, 2, '66,67%', 1, '33,33%'], 'tri oštećene (stari unos = jedna žrtva)');
   assert.deepStrictEqual(rt[2].rows.slice(-1)[0], ['SVI SUDOVI', 3, 2, '66,67%', 1, '33,33%']);
   assert.deepStrictEqual(rt[5].rows.slice(-1)[0], ['SVI SUDOVI', 2, 1, '50%'], 'olakšavajuća okolnost ostaje po predmetu');
-  const rel = rt.find(t => t.title === 'Odnos oštećenih i okrivljenih'); assert.strictEqual(rel.rows.length, 3);
+  const rel = rt.find(t => t.title === 'Odnos oštećenih i okrivljenih'); assert.deepStrictEqual(rel.rows.map(r => r[0]), ['Supruga', 'Sadašnji partnerski odnos – ukupno', 'Sestra', 'Snaha', 'Porodica i srodstvo – ukupno', 'UKUPNO']);
   const tp = ST.compute('vaw', data, null, 'vaw'); assert.strictEqual(tp.find(t => t.title === 'Oštećene').rows[0][1], 3);
   data.predmeti.push({ _id: 'c', sud: 'Osnovni sud Bar', Title: 'K 3/25', zrtve: [{ odnos: 'majka' }],
     optuzeni: [{ oznaka: '1.', osudjivan: true, glavnaSankcija: 'Kazna zatvora', zatvorMjeseci: 4 }, { oznaka: '2.', osudjivan: false, glavnaSankcija: 'Uslovna osuda' }] });
@@ -723,6 +723,15 @@ test('sinhronizacija: u mirovanju se čita samo oznaka izmjena', async () => {
     s = await adm.sync.run(); assert(adm.store.records('svi_predmeti').some(r => r.id === 'nov2'), 'bez meta/rev provjeravaju se sve liste');
     fb.docs.set('meta/rev', rule); ana.store.set('revBlockedAt', null);
   } finally { global.fetch = orig; }
+});
+test('tabela 9: odnos po kategorijama iz izvještaja', () => {
+  assert.strictEqual(S.odnosKategorija('Otac'), 'Ćerka'); assert.strictEqual(S.odnosKategorija('Sestrična (godište 2004.)'), 'Rođaci');
+  assert.strictEqual(S.odnosKategorija('Bivši vanbračni suprug'), 'Bivša vanbračna supruga'); assert.strictEqual(S.odnosKategorija('Poznanik'), 'Površno poznanstvo');
+  const t = ST.report('vaw', { predmeti: [{ _id: 'a', sud: 'Osnovni sud u Podgorici', zrtve: [{ odnos: 'Supruga', prijavljivala: true }, { odnos: 'Suprug', pridruzila: true }, { odnos: 'Brat' }, { odnos: 'Xyz' }, {}] }] })
+    .find(x => x.title === 'Odnos oštećenih i okrivljenih');
+  assert.deepStrictEqual(t.rows.map(r => r[0]), ['Supruga', 'Sadašnji partnerski odnos – ukupno', 'Sestra', 'Porodica i srodstvo – ukupno', 'Ostali odnosi', 'Odnos nije upisan', 'UKUPNO']);
+  assert.deepStrictEqual(t.rows[0], ['Supruga', 2, 1, '50%', 1, '50%']);
+  assert(/Nije svrstano: Xyz/.test(t.info));
 });
 test('sankcije: opis, tabele za izvještaj i graditelj', () => {
   assert.strictEqual(S.sankcijaOpis({ glavnaSankcija: 'Kazna zatvora', zatvorGodina: 1, zatvorMjeseci: 6, uzMjeru: true, mjereBezbjednosti: ['Oduzimanje predmeta'] }),

@@ -69,6 +69,23 @@ async function syncNow() {
   send('app:state', state()); send('data:changed');
   return s;
 }
+// pri zatvaranju se prvo salju nesacuvane izmjene; bez interneta se ne zadrzava korisnik
+async function posaljiPrijeIzlaska() {
+  for (;;) {
+    const m = me(); if (!sync || !m || !store.pending(m.email).length) return true;
+    let s = null;
+    if (online) {
+      win.webContents.executeJavaScript("window.__toast && window.__toast('Šaljem podatke na server prije zatvaranja…')").catch(() => {});
+      s = await Promise.race([syncNow().catch(e => ({ error: e.message })), new Promise(r => setTimeout(() => r({ error: 'Server nije odgovorio na vrijeme.' }), 30000))]);
+    }
+    const n = store.pending(m.email).length; if (!n) return true;
+    const zasto = !online ? 'Nema internet veze.' : s && s.state === 'quota' ? 'Potrošen je dnevni limit servera.' : (s && s.error) || 'Slanje nije uspjelo.';
+    const r = await dialog.showMessageBox(win, { type: 'warning', buttons: ['Pokušaj ponovo', 'Zatvori'], defaultId: 0, cancelId: 0,
+      message: `${n} ${n === 1 ? 'izmjena nije poslata' : 'izmjena nije poslato'} na server.`,
+      detail: `${zasto}\n\nIzmjene ostaju sačuvane na ovom računaru i biće poslate kad sljedeći put otvorite aplikaciju sa internet vezom.` });
+    if (r.response === 1) return true;
+  }
+}
 function scheduleSync(delay = 2500) {
   clearTimeout(timer);
   timer = setTimeout(async () => { if (online) await syncNow(); scheduleSync(SYNC_EVERY_MS); }, delay);
@@ -262,6 +279,7 @@ function createWindow() {
         const r = await dialog.showMessageBox(win, { type: 'question', buttons: ['Ostani', 'Zatvori bez čuvanja'], defaultId: 0, cancelId: 0, message: 'Forma ima nesačuvane izmjene.' });
         if (r.response !== 1) return;
       }
+      if (!(await posaljiPrijeIzlaska())) return;
       win._allowClose = true; win.close();
     }).catch(() => { win._allowClose = true; win.close(); });
   });

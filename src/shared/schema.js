@@ -37,6 +37,27 @@
   const listsOf = spaceKey => LISTS.filter(l => l.space === spaceKey);
   const baseKey = k => k.replace(/^(svi_|svir_|roc_|vaw_)/, '');
 
+  // odnos zrtve i optuzenog svrstan u kategorije iz izvjestaja (tabela 9); upisi poput "otac" ili "brat" opisuju optuzenog
+  const ODNOSI = ['Supruga', 'Bivša supruga', 'Vanbračna supruga', 'Bivša vanbračna supruga', 'Emotivna partnerka', 'Bivša emotivna partnerka', 'Majka', 'Ćerka', 'Pastorka', 'Sestra', 'Snaha', 'Rođaci',
+    'Blisko poznanstvo', 'Površno poznanstvo', 'Profesionalni odnos', 'Slučajni kontakt', 'Nepoznati'];
+  const ODNOS_PRAVILA = [
+    [/bivš\w*\s.*(vanbra|nevj|nevenč|nejven)/, 'Bivša vanbračna supruga'], [/bivš\w*\s.*(supru|žen)/, 'Bivša supruga'],
+    [/bivš\w*\s.*(partner|djevoj|devoj|emotiv|veza)/, 'Bivša emotivna partnerka'],
+    [/vanbra|nevjen|nevenč|nejven/, 'Vanbračna supruga'], [/supru|^žena$/, 'Supruga'], [/partner|djevoj|devoj|emotiv|intimn/, 'Emotivna partnerka'],
+    [/nepozn/, 'Nepoznati'], [/slučaj|slucaj|prolazn/, 'Slučajni kontakt'],
+    [/blisk|prijatelj|komši|komsi|cimer/, 'Blisko poznanstvo'], [/pozn|pozan/, 'Površno poznanstvo'],
+    [/profesion|posl|koleg|klijent|pacijent/, 'Profesionalni odnos'],
+    [/^(majka|mati|sin|sinovi)$/, 'Majka'], [/ćerk|kćer|cerk|^otac$/, 'Ćerka'], [/^(sestra|brat)$/, 'Sestra'], [/pastor|očuh|ocuh/, 'Pastorka'], [/snah/, 'Snaha'],
+    [/rođa|roda|rodbin|srod|sestrič|sestric|bratan|svast|svekr|tetk|strin|ujn|stric|ujak|tetak|brat od|sestra od|unuk|baba|nan[ae]|zaov|jetrv|djever|dever|zet|tast|punac|punic|maćeh|maceh|deda|djed/, 'Rođaci'],
+  ];
+  const ODNOS_GRUPE = [
+    ['Sadašnji partnerski odnos', ['Supruga', 'Vanbračna supruga', 'Emotivna partnerka']],
+    ['Bivši partnerski odnos', ['Bivša supruga', 'Bivša vanbračna supruga', 'Bivša emotivna partnerka']],
+    ['Porodica i srodstvo', ['Majka', 'Ćerka', 'Pastorka', 'Sestra', 'Snaha', 'Rođaci']],
+    ['Van porodice', ['Blisko poznanstvo', 'Površno poznanstvo', 'Profesionalni odnos', 'Slučajni kontakt', 'Nepoznati']]];
+  const odnosKategorija = v => { const t = String(v || '').toLowerCase().replace(/\(.*?\)/g, ' ').replace(/[0-9.,]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!t) return null; const k = ODNOSI.find(x => x.toLowerCase() === t); if (k) return k;
+    const p = ODNOS_PRAVILA.find(([re]) => re.test(t)); return p ? p[1] : null; };
   // krivicne sankcije po KZ CG (cl. 33, 52, 61, 67)
   const SANKCIJE = ['Kazna dugotrajnog zatvora', 'Kazna zatvora', 'Kazna zatvora koja se izvršava u prostorijama za stanovanje', 'Novčana kazna', 'Kazna rada u javnom interesu',
     'Uslovna osuda', 'Uslovna osuda sa zaštitnim nadzorom', 'Sudska opomena', 'Vaspitna mjera', 'Mjera bezbjednosti', 'Oslobađajuća presuda', 'Odbijajuća presuda'];
@@ -81,8 +102,7 @@
     'odlaganja.Razlogodlaganja': RAZLOZI,
     'rocista.objasnio': ['Objasnio', 'Pročitao'], 'rocista.prekidRazlog': ['Radi pripremanja odbrane', 'Radi odmora', 'Drugo'],
     'rocista.dovodjenjeLice': ['Optuženi', 'Svjedok', 'Vještak', 'Oštećeni'],
-    'vaw_predmeti.odnos': ['Supruga', 'Bivša supruga', 'Vanbračna supruga', 'Bivša vanbračna supruga', 'Emotivna partnerka', 'Bivša emotivna partnerka', 'Majka', 'Ćerka', 'Sestra', 'Rođaci',
-      'Blisko poznanstvo', 'Površno poznanstvo', 'Profesionalni odnos', 'Slučajni kontakt', 'Nepoznati'],
+    'vaw_predmeti.odnos': ODNOSI,
     'vaw_predmeti.krivicnoDjelo': ['Nasilje u porodici ili u porodičnoj zajednici', 'Proganjanje', 'Nedozvoljene polne radnje', 'Seksualno uznemiravanje', 'Silovanje', 'Ugrožavanje sigurnosti'],
   };
   function choiceKeys(listKey, name) { return [`${listKey}.${name}`, `${baseKey(listKey)}.${name}`]; }
@@ -962,7 +982,7 @@
   }
 
   const isPhased = listKey => PHASED.includes(baseKey(listKey));
-  const api = { zrtveOf, optuzeniOf, OPT_POLJA, SANKCIJE, MJERE_BEZBJEDNOSTI, ZASTITNI_NADZOR, sankTip, sankcijaOpis, TOK_DOGADJAJI, TOK_KRAJ, TOK_FAZE, TOK_STARA, TOK_IZVEDENA, tokFaza, tokIzStarog, tokUStaro, tokProvjera, tokPregled, tokSort, CUSTOM_TYPES, isCustomKey, isCustomField, applyCustom, customConfig, newKey, SDT_IZMJENE, SDT_GRUPE, sdtRezim, sdtDozvoljen, sdtProvjera, isOkk, ROC_MJERE, rocMjere, rocMjereZbir, ODL_UCESNICI, ODL_DOSTAVA, ODL_GRUPE, ODL_OPIS, rocRazlozi, KZ, DODACI, kzClan, tackeU, djeloText, djelaText, parseDjela, OBAVEZNA_POLJA, OZNAKE, oznakeFor, splitCaseNo, normCaseNo, dateRules, ZKP_IZMJENE_2026, noviZKP, addMonths, potvrdaRok, PHASED, isPhased, MODULES, SPACES, SPACE_BY_KEY, LISTS, LIST_BY_KEY, FORMS, FALLBACK_CHOICES, SUDOVI, listsOf, baseKey, choiceKeys, fallbackChoices,
+  const api = { zrtveOf, optuzeniOf, OPT_POLJA, ODNOSI, ODNOS_GRUPE, odnosKategorija, SANKCIJE, MJERE_BEZBJEDNOSTI, ZASTITNI_NADZOR, sankTip, sankcijaOpis, TOK_DOGADJAJI, TOK_KRAJ, TOK_FAZE, TOK_STARA, TOK_IZVEDENA, tokFaza, tokIzStarog, tokUStaro, tokProvjera, tokPregled, tokSort, CUSTOM_TYPES, isCustomKey, isCustomField, applyCustom, customConfig, newKey, SDT_IZMJENE, SDT_GRUPE, sdtRezim, sdtDozvoljen, sdtProvjera, isOkk, ROC_MJERE, rocMjere, rocMjereZbir, ODL_UCESNICI, ODL_DOSTAVA, ODL_GRUPE, ODL_OPIS, rocRazlozi, KZ, DODACI, kzClan, tackeU, djeloText, djelaText, parseDjela, OBAVEZNA_POLJA, OZNAKE, oznakeFor, splitCaseNo, normCaseNo, dateRules, ZKP_IZMJENE_2026, noviZKP, addMonths, potvrdaRok, PHASED, isPhased, MODULES, SPACES, SPACE_BY_KEY, LISTS, LIST_BY_KEY, FORMS, FALLBACK_CHOICES, SUDOVI, listsOf, baseKey, choiceKeys, fallbackChoices,
     fieldsOf, isVisible, sectionVisible, validate, summarize, caseTitle, isEmpty, isDate, days, dayNum, fmtDate };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Schema = api;
 })(typeof self !== 'undefined' ? self : this);
