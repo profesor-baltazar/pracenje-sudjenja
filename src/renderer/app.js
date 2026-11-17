@@ -3,6 +3,7 @@
 const S = window.Schema, ST = window.Stats, api = window.api;
 
 const st = {
+  sortCols: procitaj('sortCols') || {}, colW: procitaj('colW') || {}, extraCols: procitaj('extraCols') || {},
   app: null, data: null, sync: { state: 'idle' },
   view: 'cases', space: 'svi', caseId: null, step: 'predmeti', faza: 1,
   edit: null,
@@ -26,6 +27,9 @@ function h(tag, attrs, ...kids) {
   for (const k of kids.flat(Infinity)) if (k !== null && k !== undefined && k !== false) el.append(k instanceof Node ? k : document.createTextNode(String(k)));
   return el;
 }
+// podesavanja prikaza (redoslijed, sirina kolona) cuvaju se na ovom racunaru
+function pamti(k, v) { try { localStorage.setItem('tm.' + k, JSON.stringify(v)); } catch (e) { } }
+function procitaj(k) { try { return JSON.parse(localStorage.getItem('tm.' + k) || 'null'); } catch (e) { return null; } }
 function toast(msg, kind) {
   const t = h('div', { class: 'toast ' + (kind || '') }, msg);
   document.getElementById('toasts').append(t); setTimeout(() => t.remove(), kind === 'err' ? 7000 : 3500);
@@ -347,6 +351,29 @@ function syncPill() {
 }
 function topbar(...left) { return h('div', { class: 'top' }, ...left, h('span', { class: 'grow' }), syncPill()); }
 
+// polja koja se mogu dodati kao kolona u listi predmeta
+function dodatneKolone(list) {
+  const fmt = (f, v) => v === null || v === undefined || v === '' || (Array.isArray(v) && !v.length) ? '' : f.type === 'bool' ? (v === true ? 'Da' : v === 'np' ? 'Nema podataka' : 'Ne')
+    : f.type === 'date' ? S.fmtDate(v) : Array.isArray(v) ? v.join(', ') : typeof v === 'number' ? v : String(v);
+  const PRESKOCI = ['djela', 'razlozi', 'mjereunosi', 'pritvortok', 'json', 'lookup', 'zrtve', 'optuzeni', 'sankcije', 'osudjeni'];
+  const out = S.fieldsOf(list).filter(f => !f.hidden && !f.virtual && !PRESKOCI.includes(f.type) && !['Title', 'sud'].includes(f.name))
+    .map(f => ({ id: 'f:' + f.name, label: f.label, grupa: 'Podaci o predmetu', val: c => fmt(f, c.fields[f.name]) }));
+  if (S.baseKey(list) === 'predmeti' && list.startsWith('vaw')) {
+    const grp = (naziv, of, polja) => polja.filter(([, t]) => ['text', 'choice', 'combo', 'bool', 'number'].includes(t)).map(([n, t, l]) => ({ id: `g:${naziv}.${n}`, grupa: naziv,
+      label: `${naziv === 'Žrtve' ? 'Žrtva' : 'Optuženi'}: ${(typeof l === 'function' ? (n === 'opisOdnosa' ? 'Opis odnosa' : n) : l).replace(/\s*\(nije obavezno\)/, '').replace(/^(Žrtva|Optuženi)( je| se)? /, (m, a, b) => b === ' se' ? 'se ' : '').replace(/^Ranije upisano \(tekst\)$/, 'Mjera bezbjednosti (stari tekst)')}`,
+      val: c => [...new Set(of(c.fields).map(x => fmt({ type: t }, x[n])).filter(x => x !== ''))].join(', ') }));
+    out.push(...grp('Žrtve', S.zrtveOf, GRUPE.zrtve.polja), ...grp('Optuženi', S.optuzeniOf, [...GRUPE.optuzeni.polja, ...GRUPE.sankcije.polja]),
+      { id: 'g:Optuženi.opis', grupa: 'Optuženi', label: 'Optuženi: Izrečena sankcija (sa trajanjem)', val: c => S.optuzeniOf(c.fields).map(S.sankcijaOpis).filter(Boolean).join('; ') });
+  }
+  const ish = S.listsOf(st.space).find(x => S.baseKey(x.key) === 'ishod');
+  if (ish) {
+    const od = (c, v) => allChildRecs(ish.key, c.id).filter(r => !v || r.fields.vrstaPresude === v).flatMap(r => (r.fields.osudjeni || []).map(S.sankcijaOpis)).filter(Boolean).join('; ');
+    out.push({ id: 'i:prvo', grupa: 'Ishod postupka', label: 'Sankcije iz prvostepene presude', val: c => od(c, 'Prvostepena') },
+      { id: 'i:prav', grupa: 'Ishod postupka', label: 'Sankcije iz pravosnažne presude', val: c => od(c, 'Pravosnažna') });
+  }
+  for (const l of S.listsOf(st.space).filter(x => !x.isCase && !x.archived)) out.push({ id: 'n:' + l.key, label: `${l.title} (broj unosa)`, grupa: 'Koraci', val: c => allChildRecs(l.key, c.id).length });
+  return out;
+}
 function viewCases() {
   const sp = S.SPACE_BY_KEY[st.space], mod = moduleOf(st.space), list = caseList(), roc = st.space.endsWith('_roc');
   const rocL = roc ? S.listsOf(st.space)[1].key : null;
@@ -365,19 +392,24 @@ function viewCases() {
     st.space === 'okk' ? [chip('ok', 'Org. kriminal'), chip('vk', 'Visoka korupcija')] : null, chip('moji', 'Moji unosi'), chip('provjera', '⚑ Za provjeru')];
   const hasSud = mod !== 'okk';
   const cols = [...(cust ? ['Predmet', 'Sud', 'Popunjenost', 'Posljednja izmjena'] : roc ? ['Predmet', hasSud ? 'Sud' : null, 'Krivično djelo', 'Ročišta', 'Posljednje ročište', 'Posljednja izmjena', ' ']
-    : mod === 'vaw' ? ['Predmet', 'Sud', 'Krivično djelo', 'Ranije prijavljivala', 'Nepridruživanje kao olakšavajuće', 'Posljednja izmjena']
+    : mod === 'vaw' ? ['Predmet', 'Sud', 'Krivično djelo', 'Odnos', 'Ranije prijavljivala', 'Nepridruživanje kao olakšavajuće', 'Posljednja izmjena']
     : ['Predmet', hasSud ? 'Sud' : 'Vrsta', 'Optužni akt', 'Oznake', 'Popunjenost', 'Posljednja izmjena']), 'Za provjeru'];
+  // dodatne kolone koje korisnik bira sam: polje predmeta, polje zrtve/optuzenog ili broj unosa u koraku
+  const DOD = dodatneKolone(list), dodIds = ((st.extraCols || {})[st.space] || []).filter(id => DOD.some(d => d.id === id));
+  const dodOf = id => DOD.find(d => d.id === id);
+  cols.splice(cols.length - 1, 0, ...dodIds.map(id => '+' + id));
   const newLabel = roc ? '+ Novi praćeni predmet' : '+ Novi predmet';
   const fl = stepList('faze'), nPh = c => fl ? allChildRecs(fl.key, c.id).length : 0;
   const tags = c => [prit(c) ? h('span', { class: 'badge blue' }, 'pritvor') : null, ' ', nPh(c) ? h('span', { class: 'badge orange' }, nPh(c) === 1 ? 'ponovljeno suđenje' : `${nPh(c)} ponovljena suđenja`) : null, ' ',
     S.isDate(c.fields.Odlaganjero_x010d_i_x0161_ta) ? h('span', { class: 'badge ok' }, 'pravosnažno') : null];
+  const odnosi = c => [...new Set(S.zrtveOf(c.fields).map(z => z.odnos).filter(x => x && String(x).trim()))];
   const daNe = v => h('td', {}, v ? h('span', { class: 'badge warn' }, 'Da') : h('span', { class: 'muted' }, 'Ne'));
   const NASLOVI = { 'Ranije prijavljivala': 'Žrtva je ranije prijavljivala nasilje',
     'Nepridruživanje kao olakšavajuće': 'Jedna od olakšavajućih okolnosti je da se oštećena nije pridružila krivičnom gonjenju' };
   const cell = (c, col) => {
     const f = c.fields, steps = col === 'Popunjenost' ? stepsFor(c).filter(s => !s.na) : null, H = rocL ? childRecs(rocL, c.id) : [];
     switch (col) {
-      case 'Predmet': return h('td', {}, h('b', {}, f.Title || '(bez broja)'), c.dirty ? [' ', h('span', { class: 'badge warn', title: 'Čeka slanje na server' }, 'nije poslato')] : null);
+      case 'Predmet': return h('td', { class: 'nowrap' }, h('b', {}, f.Title || '(bez broja)'), c.dirty ? [' ', h('span', { class: 'badge warn', title: 'Čeka slanje na server' }, 'nije poslato')] : null);
       case 'Sud': return h('td', {}, f.sud || h('span', { class: 'muted' }, '—'));
       case 'Vrsta': return h('td', {}, f.Vrstapredmeta || h('span', { class: 'muted' }, '—'));
       case 'Optužni akt': return h('td', {}, f.Vrstaoptu_x017e_nogakta || h('span', { class: 'muted' }, '—'));
@@ -385,6 +417,7 @@ function viewCases() {
       case 'Ranije prijavljivala': { const z = S.zrtveOf(f);
         return z.some(x => x.prijavljivala === true) ? daNe(true) : z.some(x => x.prijavljivala === 'np') ? h('td', {}, h('span', { class: 'muted' }, 'Nema podataka')) : daNe(false); }
       case 'Nepridruživanje kao olakšavajuće': return daNe(f.olaksavajucaNepridruzivanje === true);
+      case 'Odnos': { const o = odnosi(c); return h('td', { class: 'small' }, o.length ? o.join(', ') : h('span', { class: 'badge err' }, 'nije upisan')); }
       case 'Oznake': return h('td', {}, tags(c));
       case 'Ročišta': return h('td', {}, `${H.length}`, H.length ? h('span', { class: 'small muted' }, ` (${H.filter(x => !x.fields.odrzano).length} odloženo)`) : null);
       case ' ': return h('td', { style: 'text-align:right' }, h('button', { class: 'btn small', title: 'Dodaj novo ročište u ovaj predmet', onclick: ev => { ev.stopPropagation(); addHearing(c.id); } }, '+ Ročište'));
@@ -392,9 +425,41 @@ function viewCases() {
       case 'Popunjenost': return h('td', { title: steps.filter(s => s.count || s.none).map(s => s.title).join(', ') }, h('div', { class: 'progress' }, steps.map(s => h('i', { class: s.count || s.none ? 'done' : '' })),
         h('span', { class: 'small muted', style: 'margin-left:6px' }, `${steps.filter(s => s.count || s.none).length}/${steps.length}`)));
       case 'Posljednja izmjena': return h('td', { class: 'small muted' }, c.modifiedBy || '', h('br'), ago(c.modifiedAt));
+      default: if (col.startsWith('+')) { const d = dodOf(col.slice(1)), v = d.val(c);
+        return h('td', { class: 'small' }, v === '' || v === null || v === undefined ? h('span', { class: 'muted' }, '—') : String(v)); }
+        return h('td');
       case 'Za provjeru': return h('td', { class: 'small provjera-cell', title: f.provjeraNapomena || '' }, f.provjera ? ['⚑ ', (f.provjeraNapomena || 'Označeno').slice(0, 90) + ((f.provjeraNapomena || '').length > 90 ? '…' : '')] : null);
     }
   };
+  // redoslijed po koloni (klik na naslov) i sirina kolona (povlacenje desne ivice); pamti se po listi
+  const srt = (st.sortCols || {})[st.space], brojKey = t => { const m = String(t || '').match(/^\s*([^\d\s]*)\s*(\d+)\s*\/\s*(\d+)/);
+    return m ? [m[1].toLowerCase(), Number(m[3]) < 100 ? 2000 + Number(m[3]) : Number(m[3]), Number(m[2])] : [String(t || '').toLowerCase(), 0, 0]; };
+  const KLJUC = { 'Predmet': c => brojKey(c.fields.Title), 'Odnos': c => odnosi(c).join(', '), 'Sud': c => c.fields.sud || '', 'Vrsta': c => c.fields.Vrstapredmeta || '', 'Optužni akt': c => c.fields.Vrstaoptu_x017e_nogakta || '',
+    'Krivično djelo': c => (c.fields.krivicnoDjelo || '').toLowerCase(), 'Ranije prijavljivala': c => { const z = S.zrtveOf(c.fields); return z.some(x => x.prijavljivala === true) ? 2 : z.some(x => x.prijavljivala === 'np') ? 1 : 0; },
+    'Nepridruživanje kao olakšavajuće': c => c.fields.olaksavajucaNepridruzivanje === true ? 1 : 0, 'Oznake': c => (prit(c) ? 4 : 0) + nPh(c) * 2 + (S.isDate(c.fields.Odlaganjero_x010d_i_x0161_ta) ? 1 : 0),
+    'Ročišta': c => rocL ? childRecs(rocL, c.id).length : 0, 'Posljednje ročište': c => rocL ? childRecs(rocL, c.id).map(x => x.fields.datum).filter(S.isDate).sort().pop() || '' : '',
+    'Popunjenost': c => { const z = stepsFor(c).filter(x => !x.na); return z.length ? z.filter(x => x.count || x.none).length / z.length : 0; },
+    'Posljednja izmjena': c => c.modifiedAt || '', 'Za provjeru': c => c.fields.provjera ? [1, c.fields.provjeraNapomena || ''] : [0, ''] };
+  const cmp = (a, b) => { if (Array.isArray(a)) { for (let i = 0; i < a.length; i++) { const r = cmp(a[i], b[i]); if (r) return r; } return 0; }
+    return typeof a === 'number' ? a - b : String(a).localeCompare(String(b), 'sr'); };
+  if (srt && KLJUC[srt.col] && cols.includes(srt.col)) { const k = KLJUC[srt.col], m = new Map(rows.map(c => [c.id, k(c)])); rows.sort((a, b) => cmp(m.get(a.id), m.get(b.id)) * (srt.dir === 'desc' ? -1 : 1)); }
+  const sortBy = col => { if (Date.now() - (st.resizedAt || 0) < 300) return; const cur = (st.sortCols || {})[st.space]; st.sortCols = { ...(st.sortCols || {}), [st.space]: { col, dir: cur && cur.col === col && cur.dir === 'asc' ? 'desc' : 'asc' } }; pamti('sortCols', st.sortCols); render(); };
+  const sirine = (st.colW || {})[st.space] || {};
+  const resize = (ev, col) => { ev.preventDefault(); ev.stopPropagation(); const th = ev.target.closest('th'), x0 = ev.clientX, w0 = th.offsetWidth;
+    const mv = e => { const w = Math.max(50, w0 + e.clientX - x0); th.style.width = th.style.minWidth = w + 'px'; };
+    const up = () => { st.resizedAt = Date.now(); document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up);
+      st.colW = { ...(st.colW || {}), [st.space]: { ...sirine, [col]: th.offsetWidth } }; pamti('colW', st.colW); };
+    document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up); };
+  for (const id of dodIds) KLJUC['+' + id] = c => { const v = dodOf(id).val(c); return v === '' || v === null || v === undefined ? '' : typeof v === 'number' ? [1, v] : String(v).toLowerCase(); };
+  const naslov = col => { const w = sirine[col], on = srt && srt.col === col, moze = !!KLJUC[col], dod = col.startsWith('+') ? dodOf(col.slice(1)) : null;
+    if (dod) return h('th', { title: dod.label + ' – kliknite za redoslijed', class: 'sortable dodatna' + (on ? ' sorted' : ''), style: w ? `width:${w}px;min-width:${w}px` : null, onclick: () => sortBy(col) },
+      dod.label, h('span', { class: 'sortarrow' }, on ? (srt.dir === 'asc' ? ' ▲' : ' ▼') : ' ↕'),
+      h('button', { class: 'col-x', title: 'Ukloni kolonu', onclick: ev => { ev.stopPropagation(); st.extraCols = { ...(st.extraCols || {}), [st.space]: dodIds.filter(x => x !== dod.id) }; pamti('extraCols', st.extraCols); render(); } }, '×'),
+      h('span', { class: 'col-resize', onmousedown: ev => resize(ev, col), onclick: ev => ev.stopPropagation() }));
+    return h('th', { title: NASLOVI[col] || (moze ? 'Kliknite za redoslijed' : ''), class: (moze ? 'sortable' : '') + (on ? ' sorted' : '') + (col === 'Predmet' ? ' nowrap' : ''),
+      style: w ? `width:${w}px;min-width:${w}px` : null, onclick: moze ? () => sortBy(col) : null },
+      col, moze ? h('span', { class: 'sortarrow' }, on ? (srt.dir === 'asc' ? ' ▲' : ' ▼') : ' ↕') : null,
+      col.trim() ? h('span', { class: 'col-resize', title: 'Povucite za širinu kolone', onmousedown: ev => resize(ev, col), onclick: ev => ev.stopPropagation(), ondblclick: ev => { ev.stopPropagation(); const o = { ...sirine }; delete o[col]; st.colW = { ...(st.colW || {}), [st.space]: o }; pamti('colW', st.colW); render(); } }) : null); };
   return h('div', {}, topbar(h('div', {}, h('div', { class: 'small muted' }, S.MODULES.find(m => m.key === mod).title), h('h1', {}, sp.title)), h('span', { class: 'muted' }, `${all.length} predmeta`)),
     h('div', { class: 'page' },
       h('div', { class: 'toolbar' },
@@ -403,9 +468,11 @@ function viewCases() {
         h('div', { class: 'chips' }, chips),
         h('span', { style: 'flex:1' }),
         h('button', { class: 'btn primary', onclick: () => { st.view = 'case'; st.caseId = null; st.pendingCase = null; st.step = list; st.edit = newEdit(list); if (st.sud && 'sud' in st.edit.draft) { st.edit.draft.sud = st.sud; st.edit.base = JSON.stringify(st.edit.draft); } render(); } }, newLabel)),
-      h('div', { class: 'card' }, rows.length ? h('table', { class: 'grid' },
-        h('thead', {}, h('tr', {}, cols.filter(Boolean).map(c => h('th', { title: NASLOVI[c] || '' }, c)))),
-        h('tbody', {}, rows.slice(0, 500).map(c => h('tr', { class: 'click' + (c.fields.provjera ? ' provjera' : ''), onclick: () => openCase(c.id) }, cols.filter(Boolean).map(col => cell(c, col))))))
+      h('div', { class: 'card', style: 'overflow-x:auto' }, rows.length ? h('table', { class: 'grid' },
+        h('thead', {}, h('tr', {}, cols.filter(Boolean).map(naslov), h('th', { class: 'dodaj-kol' },
+          h('select', { title: 'Dodaj kolonu', onchange: e => { const id = e.target.value; if (!id) return; st.extraCols = { ...(st.extraCols || {}), [st.space]: [...dodIds.filter(x => x !== id), id] }; pamti('extraCols', st.extraCols); render(); } },
+            h('option', { value: '' }, '+ Kolona'), [...new Set(DOD.map(d => d.grupa))].map(g => h('optgroup', { label: g }, DOD.filter(d => d.grupa === g && !dodIds.includes(d.id)).map(d => h('option', { value: d.id }, d.label)))))))),
+        h('tbody', {}, rows.slice(0, 500).map(c => h('tr', { class: 'click' + (c.fields.provjera ? ' provjera' : ''), onclick: () => openCase(c.id) }, cols.filter(Boolean).map(col => cell(c, col)), h('td')))))
         : h('div', { class: 'empty' }, all.length ? 'Nijedan predmet ne odgovara pretrazi.' : `Još nema predmeta. Kliknite „${newLabel.slice(2)}” da unesete prvi${st.app.isAdmin ? ', ili uvezite postojeće podatke u Administraciji' : ''}.`)),
       rows.length > 500 ? h('p', { class: 'small muted' }, `Prikazano prvih 500 od ${rows.length} – suzite pretragu.`) : null));
 }

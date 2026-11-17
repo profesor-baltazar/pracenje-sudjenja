@@ -4,6 +4,12 @@ Desktop aplikacija (Windows) za unos i analizu podataka sa projekata praćenja s
 
 ## Istorija izmjena
 
+### 1.2.9
+- Lista predmeta (sva tri modula): broj predmeta je uvijek u jednom redu; klik na naslov kolone ređa listu po toj koloni (▲ rastuće, ▼ opadajuće); širina kolona se mijenja povlačenjem desne ivice naslova, a dvoklik vraća početnu širinu.
+- Preko „+ Kolona” mogu se dodati kolone po izboru: polja predmeta, podaci o žrtvama i optuženima (nasilje nad ženama), sankcije iz ishoda postupka i broj unosa u svakom koraku. Prazna polja se pri ređanju prikazuju prva.
+- Nasilje nad ženama: u listi predmeta dodata je kolona „Odnos”; ako odnos nije upisan, to je istaknuto.
+- Izbor kolona, redoslijed i širine pamte se na računaru, posebno za svaki modul.
+
 ### 1.2.8
 - Svaki korisnik može predmet označiti za provjeru i ostaviti napomenu šta nije jasno. Označeni predmeti su u listi svijetložuti, napomena je u posljednjoj koloni „Za provjeru”, a filter „⚑ Za provjeru” prikazuje samo njih. U samom predmetu napomena je na vrhu, a na dnu se može dopuniti ili oznaka ukloniti.
 - Nasilje nad ženama: pitanja da li je žrtva ranije prijavljivala nasilje i da li se pridružila krivičnom gonjenju imaju i odgovor „Nema podataka”, koji se u tabelama prikazuje posebno i ne računa se kao „Ne”.

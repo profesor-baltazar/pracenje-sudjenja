@@ -295,3 +295,16 @@ table.grid { width: 100%; border-collapse: collapse; }
 .provjera-bar { margin-top: 14px; display: flex; justify-content: flex-end; }
 .provjera-card { margin-top: 14px; padding: 14px 18px; background: #fffbe8; border: 1px solid #f1dc8a; display: flex; flex-direction: column; gap: 8px; }
 .provjera-card textarea { width: 100%; }
+.grid .nowrap { white-space: nowrap; }
+.grid th { position: relative; }
+.grid th.sortable { cursor: pointer; user-select: none; }
+.grid th.sortable:hover { color: var(--ink); }
+.grid th .sortarrow { color: var(--ink-3); font-size: 11px; }
+.grid th.sorted .sortarrow { color: var(--accent, #1f4e8c); }
+.grid th .col-resize { position: absolute; top: 0; right: 0; width: 7px; height: 100%; cursor: col-resize; border-right: 2px solid transparent; }
+.grid th .col-resize:hover { border-right-color: #9aa4b5; }
+.grid th.dodatna { background: #f3f6fb; }
+.grid th .col-x { border: 0; background: none; color: var(--ink-3); cursor: pointer; padding: 0 2px; margin-left: 4px; font-size: 14px; }
+.grid th .col-x:hover { color: var(--err); }
+.grid th.dodaj-kol { width: 1%; }
+.grid th.dodaj-kol select { width: auto; font-size: 12px; padding: 3px 6px; color: var(--ink-3); }
